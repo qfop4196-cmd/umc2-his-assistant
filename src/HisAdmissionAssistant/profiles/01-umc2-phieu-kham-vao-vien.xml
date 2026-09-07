@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutomationProfile Name="UMC2HIS — Phiếu khám vào viện" WindowTitleRegex=".*" ProcessNames="UMC2HIS,MQHIS,MQEMR" StopBeforeSave="true" CloudFormCode="admission_sheet" AllowSaveAfterFill="false">
+  <Fields>
+    <Field Key="PatientId" Label="Mã bệnh nhân (đối chiếu)" AutomationId="mabn" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="true" Multiline="false" Operation="Verify" />
+    <Field Key="ReasonForAdmission" Label="Lý do vào viện" AutomationId="lydo" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="true" Multiline="true" Operation="Set" />
+    <Field Key="History" Label="Quá trình bệnh lý" AutomationId="benhly" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="PastHistory" Label="Tiền sử bản thân" AutomationId="banthan" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="FamilyHistory" Label="Tiền sử gia đình" AutomationId="giadinh" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="Allergy" Label="Dị ứng" AutomationId="diung" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="GeneralExam" Label="Khám toàn thân" AutomationId="toanthan" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="OrganExam" Label="Khám các bộ phận" AutomationId="bophan" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="Summary" Label="Tóm tắt bệnh án" AutomationId="tomtat" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="Diagnosis" Label="Chẩn đoán vào viện" AutomationId="chandoan" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="true" Multiline="true" Operation="Set" />
+    <Field Key="PreliminaryDiagnosis" Label="Chẩn đoán sơ bộ" AutomationId="sobo" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="Treatment" Label="Xử trí" AutomationId="xuli" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="Note" Label="Chú ý" AutomationId="chuy" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
+    <Field Key="Pulse" Label="Mạch" AutomationId="mach" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
+    <Field Key="Temperature" Label="Nhiệt độ" AutomationId="nhietdo" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
+    <Field Key="BloodPressure" Label="Huyết áp" AutomationId="huyetap" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
+    <Field Key="RespiratoryRate" Label="Nhịp thở" AutomationId="nhiptho" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
+    <Field Key="Weight" Label="Cân nặng" AutomationId="cannang" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
+    <Field Key="Height" Label="Chiều cao" AutomationId="cao" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
+  </Fields>
+</AutomationProfile>

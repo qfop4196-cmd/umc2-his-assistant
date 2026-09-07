@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutomationProfile Name="UMC2HIS — Chọn phòng và giường" WindowTitleRegex=".*" ProcessNames="UMC2HIS,MQHIS" StopBeforeSave="true">
+  <Fields>
+    <Field Key="Room" Label="Phòng" AutomationId="phong" Name="" ControlType="ComboBox" ClassName="" MatchIndex="0" Required="true" Multiline="false" Operation="Set" />
+    <Field Key="Bed" Label="Giường" AutomationId="listBox1" Name="" ControlType="List" ClassName="" MatchIndex="0" Required="true" Multiline="false" Operation="Set" />
+  </Fields>
+</AutomationProfile>

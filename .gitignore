@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+artifacts/*.png
+artifacts/*.zip
+*.user
+*.suo
+.vs/
+TestResults/
+*.json
+!profiles/*.json
