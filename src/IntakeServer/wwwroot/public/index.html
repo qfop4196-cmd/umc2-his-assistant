@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0b6e8c">
+  <title>Tờ khai trước khám</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/intake.css">
+</head>
+<body class="pt">
+  <header class="pt-header">
+    <div class="pt-header-inner">
+      <img src="/assets/favicon.svg" alt="" width="40" height="40">
+      <div class="grow">
+        <div class="pt-hospital" id="hospitalName">Bệnh viện</div>
+        <div class="pt-title">Tờ khai trước khám</div>
+      </div>
+      <button type="button" class="btn ghost small" id="restartBtn" hidden>Khai lại từ đầu</button>
+    </div>
+  </header>
+
+  <main class="pt-main" id="app" aria-live="polite">
+    <noscript>
+      <div class="alert warn"><div><strong>Cần bật JavaScript</strong>Trình duyệt đang tắt JavaScript. Vui lòng bật lên hoặc khai trực tiếp tại quầy tiếp nhận.</div></div>
+    </noscript>
+    <div class="pt-loading"><span class="spinner"></span> Đang tải tờ khai…</div>
+  </main>
+
+  <div class="toast-host" id="toasts" role="status" aria-live="polite"></div>
+  <script src="/assets/intake.js"></script>
+</body>
+</html>

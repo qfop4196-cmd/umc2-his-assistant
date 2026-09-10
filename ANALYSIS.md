@@ -34,3 +34,10 @@ MVP không tự điều hướng toàn bộ menu và không tự bấm Lưu. Nó
 3. Pattern của `ListLookupICD`, `LibList`, `MaskedBox` và DotNetBar: UIA Value, MSAA Legacy hay cần keyboard fallback.
 4. Mã bệnh nhân đang hiển thị ở một hay nhiều control (`mabn`, `mabn1`, `mabn3`) để cấu hình đối chiếu chính xác.
 5. Luồng mở lần lượt form khám, phiếu vào viện và chọn phòng/giường tại cấu hình triển khai của bệnh viện.
+
+## Cập nhật 09/2026 — luồng tờ khai trước khám
+
+- Thêm máy chủ LAN `UMC2 Intake Server` (tờ khai người bệnh, điều dưỡng duyệt, hàng chờ máy bác sĩ); không kết nối database HIS.
+- Máy bác sĩ tự nhận bệnh nhân đang mở bằng cách **đọc** control mã BN (`mabn` trên `frmKhambenhvv`, `mabn1` trên `frmKhambenh1`) qua UI Automation, rồi ghép với tờ khai điều dưỡng đã gắn đúng mã BN.
+- Cần xác nhận thêm trên máy thật: control họ tên và năm sinh BN trên hai form để ghép được tờ khai chưa có mã BN (profile đã có sẵn trường `PatientName`/`BirthYear` chế độ `Read`, chỉ cần bắt selector).
+

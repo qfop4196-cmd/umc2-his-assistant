@@ -8,7 +8,7 @@ using System.Windows.Forms;
 
 namespace HisAdmissionAssistant
 {
-    public sealed class MainForm : Form
+    public sealed partial class MainForm : Form
     {
         private readonly ProfileStore profileStore = new ProfileStore();
         private readonly UiaAutomationService automation = new UiaAutomationService();
@@ -44,7 +44,7 @@ namespace HisAdmissionAssistant
 
         public MainForm()
         {
-            Text = "HIS Admission Assistant — Webapp → HIS";
+            Text = "UMC2 HIS Assistant — Tờ khai BN → HIS";
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(1060, 680);
             Size = new Size(1280, 780);
@@ -54,7 +54,11 @@ namespace HisAdmissionAssistant
             cloudSecretBox.Text = Environment.GetEnvironmentVariable("HIS_AGENT_SECRET") ?? string.Empty;
             LoadProfiles();
             FormClosing += OnFormClosing;
-            Shown += delegate { AdjustInputSplit(); };
+            Shown += delegate
+            {
+                AdjustInputSplit();
+                InitIntake();
+            };
             SizeChanged += delegate { AdjustInputSplit(); };
         }
 
@@ -111,6 +115,8 @@ namespace HisAdmissionAssistant
             Controls.Add(top);
 
             var tabs = new TabControl { Dock = DockStyle.Fill };
+            mainTabs = tabs;
+            tabs.TabPages.Add(BuildIntakeTab());
             tabs.TabPages.Add(BuildInputTab());
             tabs.TabPages.Add(BuildCloudTab());
             tabs.TabPages.Add(BuildInspectorTab());
@@ -314,7 +320,7 @@ namespace HisAdmissionAssistant
 
             var heading = new Label
             {
-                Text = "Nhận bộ hồ sơ đã được bác sĩ duyệt từ webapp",
+                Text = "Chế độ cũ: nhận tác vụ theo hàng đợi (dùng tab Tờ khai BN cho máy chủ LAN mới)",
                 AutoSize = true,
                 Font = new Font(Font.FontFamily, 13F, FontStyle.Bold),
                 Margin = new Padding(0, 0, 0, 12)
@@ -520,6 +526,7 @@ namespace HisAdmissionAssistant
             }
             profileBox.SelectedIndex = index;
             Log("Đã nạp " + profiles.Count + " profile; không nạp dữ liệu bệnh nhân từ đĩa.");
+            RefreshWatcherProfiles();
         }
 
         private void SelectProfile()
@@ -555,6 +562,8 @@ namespace HisAdmissionAssistant
                 fieldGrid.Rows[index].Tag = field;
                 if (string.Equals(field.Operation, "Verify", StringComparison.OrdinalIgnoreCase))
                     fieldGrid.Rows[index].DefaultCellStyle.BackColor = Color.FromArgb(232, 245, 233);
+                else if (UiaAutomationService.IsReadOnly(field))
+                    fieldGrid.Rows[index].DefaultCellStyle.BackColor = Color.FromArgb(233, 240, 251);
             }
             loadingEditor = false;
             if (fieldGrid.Rows.Count > 0) fieldGrid.Rows[0].Selected = true;
@@ -567,7 +576,8 @@ namespace HisAdmissionAssistant
             if (field == null) return;
             loadingEditor = true;
             editorLabel.Text = field.Label + (field.Required ? " *" : string.Empty) +
-                (string.Equals(field.Operation, "Verify", StringComparison.OrdinalIgnoreCase) ? " — chỉ đối chiếu, không ghi" : string.Empty);
+                (string.Equals(field.Operation, "Verify", StringComparison.OrdinalIgnoreCase) ? " — chỉ đối chiếu, không ghi" :
+                    UiaAutomationService.IsReadOnly(field) ? " — chỉ đọc để ghép tờ khai, không bao giờ ghi" : string.Empty);
             valueEditor.Text = field.Value ?? string.Empty;
             loadingEditor = false;
         }
@@ -905,6 +915,7 @@ namespace HisAdmissionAssistant
                     Fields = currentProfile.Fields.Select(f => f.CloneWithoutValue()).ToList()
                 };
                 var path = profileStore.SaveUserProfile(clean);
+                RefreshWatcherProfiles();
                 statusLabel.Text = "Đã lưu profile: " + path;
                 Log("Đã lưu selector profile; không lưu dữ liệu nhập.");
                 MessageBox.Show("Đã lưu selector vào:\r\n" + path + "\r\n\r\nDữ liệu bệnh nhân không được lưu.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -960,6 +971,8 @@ namespace HisAdmissionAssistant
 
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
+            ShutdownIntake(e);
+            if (e.Cancel) return;
             ClearSensitiveValues();
             cloudSecretBox.Clear();
             logBox.Clear();

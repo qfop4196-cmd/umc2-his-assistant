@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Áp phích tờ khai trước khám</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/print.css">
+</head>
+<body class="poster-body">
+  <div class="poster-toolbar no-print">
+    <button type="button" class="btn primary" id="printBtn">In áp phích</button>
+    <span class="hint">Khổ A4 dọc. Có thể dán tại quầy tiếp nhận, phòng chờ hoặc gửi kèm tin nhắn hẹn khám.</span>
+  </div>
+  <main class="poster" id="poster">
+    <header class="poster-head">
+      <img src="/assets/favicon.svg" alt="" width="64" height="64">
+      <div>
+        <div class="poster-hospital" id="hospital">Bệnh viện</div>
+        <div class="poster-dept" id="dept"></div>
+      </div>
+    </header>
+    <h1 class="poster-title">KHAI THÔNG TIN<br>TRƯỚC KHI KHÁM</h1>
+    <p class="poster-lead">Quét mã bằng camera điện thoại · 3–5 phút · Bác sĩ khám nhanh hơn</p>
+    <div class="poster-qr" id="qr"></div>
+    <div class="poster-url" id="url"></div>
+    <ol class="poster-steps">
+      <li><strong>Quét mã QR</strong> và điền tờ khai trên điện thoại.</li>
+      <li><strong>Nhận mã tờ khai</strong> (ví dụ K7P-29Q) sau khi gửi.</li>
+      <li><strong>Đưa mã cho điều dưỡng</strong> khi đến lượt để đối chiếu.</li>
+    </ol>
+    <p class="poster-warning">Có dấu hiệu cấp cứu (đau ngực dữ dội, khó thở, yếu liệt, chảy máu nhiều)? Báo ngay nhân viên y tế — không cần khai.</p>
+    <footer class="poster-foot" id="note">Thông tin chỉ nhân viên y tế được xem và tự động xóa khỏi hệ thống tờ khai sau vài ngày.</footer>
+  </main>
+  <script src="/assets/qr.js"></script>
+  <script src="/assets/print.js"></script>
+</body>
+</html>

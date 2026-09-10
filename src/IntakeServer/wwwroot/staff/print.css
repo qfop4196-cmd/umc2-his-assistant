@@ -1,0 +1,35 @@
+/* A4 poster with QR code for the patient form. */
+.poster-body { background: #e9eef2; padding: 16px; }
+.poster-toolbar { max-width: 210mm; margin: 0 auto 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.poster {
+  width: 100%;
+  max-width: 210mm;
+  min-height: 287mm;
+  margin: 0 auto;
+  background: #fff;
+  padding: 16mm 16mm 12mm;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  border-top: 10mm solid var(--primary);
+}
+.poster-head { display: flex; align-items: center; gap: 14px; align-self: stretch; justify-content: center; text-align: left; }
+.poster-hospital { font-size: 1.25rem; font-weight: 750; color: var(--text); }
+.poster-dept { font-size: 1rem; color: var(--muted); font-weight: 600; }
+.poster-title { font-size: clamp(2rem, 7vw, 3.1rem); line-height: 1.1; margin: 11mm 0 4mm; color: var(--primary); font-weight: 850; letter-spacing: 0.01em; }
+.poster-lead { font-size: 1.15rem; color: var(--muted); margin-bottom: 7mm; }
+.poster-qr svg { width: min(92mm, 70vw); height: auto; display: block; }
+.poster-qr { padding: 5mm; border: 2px solid var(--line); border-radius: 18px; }
+.poster-url { font-family: var(--mono); font-size: 1.05rem; margin: 5mm 0 7mm; word-break: break-all; color: var(--text); }
+.poster-steps { text-align: left; font-size: 1.15rem; line-height: 1.5; max-width: 150mm; margin: 0 0 6mm; padding-left: 1.3em; }
+.poster-steps li + li { margin-top: 2mm; }
+.poster-warning { background: var(--danger-soft); color: #7d1a14; border: 1px solid var(--danger-line); border-radius: 12px; padding: 4mm 5mm; font-weight: 600; max-width: 160mm; }
+.poster-foot { margin-top: auto; padding-top: 6mm; font-size: 0.9rem; color: var(--muted); }
+@page { size: A4 portrait; margin: 0; }
+@media print {
+  .no-print { display: none !important; }
+  .poster-body { background: #fff; padding: 0; }
+  .poster { box-shadow: none; max-width: none; min-height: 297mm; }
+}

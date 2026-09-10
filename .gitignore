@@ -8,3 +8,4 @@ artifacts/*.zip
 TestResults/
 *.json
 !profiles/*.json
+dist/

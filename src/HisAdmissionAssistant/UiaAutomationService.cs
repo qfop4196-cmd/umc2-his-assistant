@@ -38,6 +38,17 @@ namespace HisAdmissionAssistant
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern int GetWindowTextLength(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+
+        private const uint GaRoot = 2;
+
         public IList<TargetWindow> FindWindows(AutomationProfile profile)
         {
             var result = new List<TargetWindow>();
@@ -143,6 +154,11 @@ namespace HisAdmissionAssistant
                         results.Add(Result(field, false, false, "Bị chặn vì selector giống nút Lưu/Xác nhận"));
                         continue;
                     }
+                    if (!HasSelector(field))
+                    {
+                        results.Add(Result(field, false, false, "Chưa gán selector (AutomationId/Name)"));
+                        continue;
+                    }
                     var element = FindField(window, field);
                     results.Add(element == null
                         ? Result(field, false, false, "Không tìm thấy")
@@ -159,7 +175,7 @@ namespace HisAdmissionAssistant
         public IList<FieldResult> Apply(AutomationElement window, IEnumerable<FieldMapping> fields)
         {
             if (window == null) throw new ArgumentNullException("window");
-            var selected = fields.Where(f => f.EnabledForFill).ToList();
+            var selected = fields.Where(f => f.EnabledForFill && !IsReadOnly(f)).ToList();
             var resolved = new Dictionary<FieldMapping, AutomationElement>();
             var results = new List<FieldResult>();
             var preflightFailed = false;
@@ -238,7 +254,7 @@ namespace HisAdmissionAssistant
             {
                 try
                 {
-                    SetElementValue(resolved[field], field.Value);
+                    SetElementValue(resolved[field], PrepareText(field));
                     results.Add(Result(field, true, true, "Đã điền"));
                 }
                 catch (Exception ex)
@@ -270,6 +286,99 @@ namespace HisAdmissionAssistant
             if (!element.TryGetCurrentPattern(InvokePattern.Pattern, out pattern))
                 throw new InvalidOperationException("Nút " + actionLabel + " không hỗ trợ UIA InvokePattern.");
             ((InvokePattern)pattern).Invoke();
+        }
+
+        /// <summary>Finds the control for a field (null when not found or the field has no selector).</summary>
+        public AutomationElement Locate(AutomationElement window, FieldMapping field)
+        {
+            if (window == null || field == null || !HasSelector(field)) return null;
+            return FindField(window, field);
+        }
+
+        /// <summary>Reads the current text of a control without changing it.</summary>
+        public bool TryRead(AutomationElement element, out string value)
+        {
+            value = string.Empty;
+            if (element == null) return false;
+            try { return TryReadValue(element, out value); }
+            catch (ElementNotAvailableException) { return false; }
+            catch (InvalidOperationException) { return false; }
+        }
+
+        /// <summary>
+        /// Current non-empty contents of the fields that would be written, so the caller can avoid overwriting
+        /// text a doctor already typed on HIS.
+        /// </summary>
+        public IDictionary<FieldMapping, string> ReadExistingValues(AutomationElement window, IEnumerable<FieldMapping> fields)
+        {
+            var result = new Dictionary<FieldMapping, string>();
+            foreach (var field in fields.Where(f => f.EnabledForFill && !IsVerify(f) && !IsReadOnly(f) && !string.IsNullOrWhiteSpace(f.Value)))
+            {
+                try
+                {
+                    var element = Locate(window, field);
+                    string current;
+                    if (element != null && TryRead(element, out current) && !string.IsNullOrWhiteSpace(current))
+                        result[field] = current;
+                }
+                catch (ElementNotAvailableException)
+                {
+                }
+            }
+            return result;
+        }
+
+        /// <summary>Top-level window currently in the foreground, if it belongs to one of <paramref name="processNames"/>.</summary>
+        public TargetWindow ForegroundWindow(ICollection<string> processNames)
+        {
+            var hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return null;
+            var root = GetAncestor(hwnd, GaRoot);
+            if (root != IntPtr.Zero) hwnd = root;
+            uint pid;
+            GetWindowThreadProcessId(hwnd, out pid);
+            if (pid == 0 || pid == (uint)Process.GetCurrentProcess().Id) return null;
+            string processName;
+            try { processName = Process.GetProcessById((int)pid).ProcessName; }
+            catch (ArgumentException) { return null; }
+            catch (InvalidOperationException) { return null; }
+            if (processNames != null && processNames.Count > 0 && !processNames.Contains(processName, StringComparer.OrdinalIgnoreCase)) return null;
+            try
+            {
+                var element = AutomationElement.FromHandle(hwnd);
+                if (element == null) return null;
+                return new TargetWindow { Element = element, ProcessId = (int)pid, ProcessName = processName, Title = element.Current.Name ?? string.Empty };
+            }
+            catch (ElementNotAvailableException) { return null; }
+            catch (ArgumentException) { return null; }
+        }
+
+        /// <summary>True if the foreground window belongs to this assistant (doctor clicked the assistant).</summary>
+        public static bool AssistantIsForeground()
+        {
+            var hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return false;
+            uint pid;
+            GetWindowThreadProcessId(hwnd, out pid);
+            return pid == (uint)Process.GetCurrentProcess().Id;
+        }
+
+        public static bool HasSelector(FieldMapping field)
+        {
+            return field != null && (!string.IsNullOrWhiteSpace(field.AutomationId) || !string.IsNullOrWhiteSpace(field.Name));
+        }
+
+        public static bool IsReadOnly(FieldMapping field)
+        {
+            return string.Equals(field.Operation, "Read", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>WinForms multi-line TextBoxes need CRLF; single-line boxes get the text flattened.</summary>
+        public static string PrepareText(FieldMapping field)
+        {
+            var value = (field.Value ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            if (field.Multiline) return value.Replace("\n", "\r\n");
+            return Regex.Replace(value, @"\s*\n+\s*", "; ").Trim();
         }
 
         private static IList<FieldResult> OrderResults(IList<FieldMapping> selected, IList<FieldResult> results)
@@ -315,8 +424,7 @@ namespace HisAdmissionAssistant
                         new PropertyCondition(AutomationElement.NameProperty, field.Name, PropertyConditionFlags.IgnoreCase),
                         field.MatchIndex);
             }
-            if (found == null && string.IsNullOrWhiteSpace(field.AutomationId) && string.IsNullOrWhiteSpace(field.Name))
-                found = FindByIndex(window, Combine(conditions), field.MatchIndex);
+            // No AutomationId and no Name: refuse to guess (the old "first Edit on the form" fallback could write into the wrong box).
             return found;
         }
 

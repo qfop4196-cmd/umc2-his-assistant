@@ -2,6 +2,8 @@
 <AutomationProfile Name="UMC2HIS — Khám bệnh và chỉ định nhập viện" WindowTitleRegex=".*" ProcessNames="UMC2HIS,MQHIS" StopBeforeSave="true">
   <Fields>
     <Field Key="PatientId" Label="Mã bệnh nhân (đối chiếu)" AutomationId="mabn1" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Verify" />
+    <Field Key="PatientName" Label="Họ tên BN (chỉ đọc – hiệu chỉnh bằng Bắt control)" AutomationId="" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Read" />
+    <Field Key="BirthYear" Label="Năm sinh BN (chỉ đọc – hiệu chỉnh bằng Bắt control)" AutomationId="" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Read" />
     <Field Key="ReasonForAdmission" Label="Lý do khám/vào viện" AutomationId="lydo" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="true" Multiline="true" Operation="Set" />
     <Field Key="Symptoms" Label="Triệu chứng" AutomationId="trieuchung" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
     <Field Key="PrimaryIcd" Label="ICD-10 chính" AutomationId="icd_chinh" Name="" ControlType="" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />

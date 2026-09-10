@@ -15,36 +15,65 @@ namespace MockHis
         }
     }
 
+    /// <summary>
+    /// Fake HIS screen for testing without real patient data. Control names mirror UMC2HIS (mabn, lydo, benhly...).
+    /// The "Bệnh nhân thử" selector simulates opening another patient so auto-detection can be tested.
+    /// </summary>
     internal sealed class MockHisForm : Form
     {
+        private static readonly string[][] Patients =
+        {
+            new[] { "BN-TEST-001", "NGUYỄN VĂN TEST", "1970" },
+            new[] { "BN-TEST-002", "TRẦN THỊ MẪU", "1988" }
+        };
+
         private readonly Label saveCountLabel = new Label();
+        private readonly ComboBox patientBox = new ComboBox();
+        private TextBox idBox;
+        private TextBox nameBox;
+        private TextBox birthBox;
+        private TableLayoutPanel layout;
         private int saveCount;
 
         public MockHisForm()
         {
             Text = "MOCK HIS - Phiếu khám vào viện";
             StartPosition = FormStartPosition.CenterScreen;
-            Size = new Size(850, 650);
+            Size = new Size(900, 760);
             Font = new Font("Segoe UI", 9F);
 
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, AutoScroll = true };
+            layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, AutoScroll = true };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             Controls.Add(layout);
 
-            AddField(layout, "Mã bệnh nhân", "mabn", "BN-TEST-001", false, true);
-            AddField(layout, "Lý do vào viện", "lydo", string.Empty, true, false);
-            AddField(layout, "Quá trình bệnh lý", "benhly", string.Empty, true, false);
-            AddField(layout, "Tiền sử bản thân", "banthan", string.Empty, true, false);
-            AddField(layout, "Tiền sử gia đình", "giadinh", string.Empty, true, false);
-            AddField(layout, "Dị ứng", "diung", string.Empty, true, false);
-            AddField(layout, "Khám toàn thân", "toanthan", string.Empty, true, false);
-            AddField(layout, "Khám các bộ phận", "bophan", string.Empty, true, false);
-            AddField(layout, "Tóm tắt", "tomtat", string.Empty, true, false);
-            AddField(layout, "Chẩn đoán", "chandoan", string.Empty, true, false);
-            AddField(layout, "Chẩn đoán sơ bộ", "sobo", string.Empty, true, false);
-            AddField(layout, "Xử trí", "xuli", string.Empty, true, false);
-            AddField(layout, "Chú ý", "chuy", string.Empty, true, false);
+            patientBox.Name = "mockPatient";
+            patientBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            foreach (var p in Patients) patientBox.Items.Add(p[0] + " — " + p[1] + " — " + p[2]);
+            patientBox.Dock = DockStyle.Fill;
+            AddRow("Bệnh nhân thử (mở hồ sơ)", patientBox, false);
+
+            idBox = AddField("Mã bệnh nhân", "mabn", false, true);
+            nameBox = AddField("Họ tên", "hoten", false, true);
+            birthBox = AddField("Năm sinh", "namsinh", false, true);
+            AddField("Lý do vào viện", "lydo", true, false);
+            AddField("Quá trình bệnh lý", "benhly", true, false);
+            AddField("Tiền sử bản thân", "banthan", true, false);
+            AddField("Tiền sử gia đình", "giadinh", true, false);
+            AddField("Dị ứng", "diung", true, false);
+            AddField("Khám toàn thân", "toanthan", true, false);
+            AddField("Khám các bộ phận", "bophan", true, false);
+            AddField("Tóm tắt", "tomtat", true, false);
+            AddField("Chẩn đoán", "chandoan", true, false);
+            AddField("Chẩn đoán sơ bộ", "sobo", true, false);
+            AddField("Xử trí", "xuli", true, false);
+            AddField("Chú ý", "chuy", true, false);
+            AddField("Mạch (lần/phút)", "mach", false, false);
+            AddField("Nhiệt độ (°C)", "nhietdo", false, false);
+            AddField("Huyết áp (mmHg)", "huyetap", false, false);
+            AddField("Nhịp thở (lần/phút)", "nhiptho", false, false);
+            AddField("Cân nặng (kg)", "cannang", false, false);
+            AddField("Chiều cao (cm)", "cao", false, false);
 
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
             var save = new Button { Name = "butLuu", Text = "Lưu", AutoSize = true };
@@ -55,26 +84,46 @@ namespace MockHis
             saveCountLabel.AutoSize = true;
             saveCountLabel.Padding = new Padding(20, 7, 0, 0);
             buttons.Controls.Add(saveCountLabel);
-            layout.Controls.Add(new Label { Text = "Thao tác", AutoSize = true }, 0, layout.RowCount);
-            layout.Controls.Add(buttons, 1, layout.RowCount++);
+            AddRow("Thao tác", buttons, false);
+
+            patientBox.SelectedIndexChanged += delegate { OpenPatient(patientBox.SelectedIndex); };
+            patientBox.SelectedIndex = 0;
             UpdateSaveCount();
         }
 
-        private static void AddField(TableLayoutPanel layout, string label, string name, string value, bool multiline, bool readOnly)
+        private void OpenPatient(int index)
         {
-            var row = layout.RowCount++;
-            layout.RowStyles.Add(new RowStyle(multiline ? SizeType.Absolute : SizeType.AutoSize, multiline ? 58 : 28));
-            layout.Controls.Add(new Label { Text = label, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row);
+            if (index < 0) return;
+            foreach (Control control in layout.Controls)
+            {
+                var box = control as TextBox;
+                if (box != null && !box.ReadOnly) box.Text = string.Empty;
+            }
+            idBox.Text = Patients[index][0];
+            nameBox.Text = Patients[index][1];
+            birthBox.Text = Patients[index][2];
+        }
+
+        private TextBox AddField(string label, string name, bool multiline, bool readOnly)
+        {
             var box = new TextBox
             {
                 Name = name,
-                Text = value,
                 ReadOnly = readOnly,
                 Multiline = multiline,
                 Dock = DockStyle.Fill,
                 ScrollBars = multiline ? ScrollBars.Vertical : ScrollBars.None
             };
-            layout.Controls.Add(box, 1, row);
+            AddRow(label, box, multiline);
+            return box;
+        }
+
+        private void AddRow(string label, Control control, bool tall)
+        {
+            var row = layout.RowCount++;
+            layout.RowStyles.Add(new RowStyle(tall ? SizeType.Absolute : SizeType.AutoSize, tall ? 58 : 28));
+            layout.Controls.Add(new Label { Text = label, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row);
+            layout.Controls.Add(control, 1, row);
         }
 
         private void UpdateSaveCount()

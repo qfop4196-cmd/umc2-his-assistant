@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HisAdmissionAssistant", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MockHis", "tools\MockHis\MockHis.csproj", "{EF2175F3-03FC-48E4-B134-CC145C474028}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IntakeServer", "src\IntakeServer\IntakeServer.csproj", "{6D0B5F2E-3A41-4C39-9E6B-7C8D2A1F0B55}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,5 +23,9 @@ Global
 		{EF2175F3-03FC-48E4-B134-CC145C474028}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EF2175F3-03FC-48E4-B134-CC145C474028}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EF2175F3-03FC-48E4-B134-CC145C474028}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6D0B5F2E-3A41-4C39-9E6B-7C8D2A1F0B55}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D0B5F2E-3A41-4C39-9E6B-7C8D2A1F0B55}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D0B5F2E-3A41-4C39-9E6B-7C8D2A1F0B55}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D0B5F2E-3A41-4C39-9E6B-7C8D2A1F0B55}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
