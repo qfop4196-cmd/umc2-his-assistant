@@ -1,1 +1,4 @@
-
+Kính chào quý thầy!!!
+File .git em đã ẩn :D :D :D 
+Trong bộ dữ liệu lưu ở .git e có thêm cả API key, tài khoản đăng nhập...
+Em rất cảm ơn quý thầy đã tạo điều kiện để em có thể phát triển được những ứng dụng hữu ích này ạ!!!
