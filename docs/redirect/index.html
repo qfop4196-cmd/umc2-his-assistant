@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>UMC2 Intake</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}
+  .box{max-width:420px}
+  a{color:#38bdf8}
+  .spinner{width:36px;height:36px;border:4px solid #334155;border-top-color:#38bdf8;border-radius:50%;margin:0 auto 16px;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #fallback{display:none;margin-top:12px;font-size:14px;color:#94a3b8}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="spinner"></div>
+  <p id="msg">Đang chuyển đến UMC2 Intake...</p>
+  <p id="fallback">Không tự chuyển được? <a id="link" href="#">Bấm vào đây</a>.</p>
+</div>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var role = params.get('to') || 'patient';
+  var msg = document.getElementById('msg');
+  var fb = document.getElementById('fallback');
+  var link = document.getElementById('link');
+
+  fetch('targets.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.json();
+    })
+    .then(function (data) {
+      var url = data[role];
+      if (!url) {
+        msg.textContent = 'Không tìm thấy địa chỉ cho "' + role + '".';
+        return;
+      }
+      link.href = url;
+      fb.style.display = 'block';
+      location.replace(url);
+    })
+    .catch(function (err) {
+      msg.textContent = 'Không tải được địa chỉ hiện tại (' + err.message + '). Vui lòng thử lại sau ít phút.';
+    });
+})();
+</script>
+</body>
+</html>
