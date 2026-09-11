@@ -52,6 +52,8 @@ namespace ServerFlowTest
                     RedirectStandardError = true
                 };
                 server = Process.Start(info);
+                var started = server;
+                Console.CancelKeyPress += delegate { KillQuietly(started); }; // Ctrl+C must not leave the test server running
                 server.OutputDataReceived += delegate { };
                 server.ErrorDataReceived += delegate { };
                 server.BeginOutputReadLine();
@@ -183,14 +185,22 @@ namespace ServerFlowTest
             }
             finally
             {
-                if (server != null && !server.HasExited)
-                {
-                    try { server.Kill(); }
-                    catch (InvalidOperationException) { }
-                }
+                KillQuietly(server);
                 try { Directory.Delete(dataDir, true); }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
+            }
+        }
+
+        private static void KillQuietly(Process process)
+        {
+            try
+            {
+                if (process != null && !process.HasExited) process.Kill();
+            }
+            catch (Exception)
+            {
+                // Already exited.
             }
         }
 

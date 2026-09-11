@@ -32,10 +32,33 @@ $renderOutput = Join-Path $renderSource 'bin\Release'
 New-Item -ItemType Directory -Force -Path $appOutput, $serverOutput, $mockOutput, $testOutput, $flowOutput, $renderOutput | Out-Null
 
 function Invoke-Csc([string]$name, [string[]]$arguments) {
-    & $csc /nologo /optimize+ $arguments
-    if ($LASTEXITCODE -ne 0) { throw "Build $name thất bại với mã $LASTEXITCODE" }
-    Write-Host "  OK  $name"
+    $ErrorActionPreference = 'Continue' # PowerShell 5.1: 2>&1 với lệnh native + 'Stop' sẽ ném lỗi giả
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        $output = @(& $csc /nologo /optimize+ $arguments 2>&1)
+        $output | ForEach-Object { Write-Host ([string]$_) }
+        if ($LASTEXITCODE -eq 0) { Write-Host "  OK  $name"; return }
+        # CS0016: file .exe đích đang bị giữ trong giây lát (OneDrive đồng bộ, phần mềm diệt virus quét) — thử lại.
+        if ($attempt -lt 3 -and ($output | Where-Object { ([string]$_) -match 'CS0016' })) {
+            Write-Host '  ... file đích đang bị chương trình khác giữ, thử lại sau 3 giây'
+            Start-Sleep -Seconds 3
+            continue
+        }
+        throw "Build $name thất bại với mã $LASTEXITCODE"
+    }
 }
+
+# Dừng các chương trình còn chạy từ lần thử trước (máy chủ tạm, Mock HIS, trợ lý, kiểm thử bị ngắt giữa chừng):
+# chúng giữ file .exe trong bin\Release nên build sẽ báo "being used by another process".
+$leftovers = @(Get-Process | ForEach-Object {
+    $path = $null
+    try { $path = $_.Path } catch { }
+    if ($path -and $path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { $_ }
+})
+foreach ($proc in $leftovers) {
+    Write-Host ('  Dừng ' + $proc.ProcessName + ' (PID ' + $proc.Id + ') còn chạy từ lần trước')
+    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+}
+if ($leftovers.Count -gt 0) { Start-Sleep -Seconds 1 }
 
 $gac = 'C:\Windows\Microsoft.NET\assembly\GAC_MSIL'
 function Ref([string]$file) { '/reference:' + (Join-Path $framework $file) }

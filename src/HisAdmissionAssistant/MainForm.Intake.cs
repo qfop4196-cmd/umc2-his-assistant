@@ -592,27 +592,26 @@ namespace HisAdmissionAssistant
             var context = patientContext;
             if (match == null || context == null || intakeBusy || activeIntake != null) return;
 
-            // 1. Re-read the patient ID right now: the doctor may have switched patients since the last poll.
+            // 1. Re-read code, name and birth year right now: the doctor may have switched patients since the last poll.
             var profile = FindLoadedProfile(context.Profile.Name) ?? context.Profile;
-            var idField = profile.Fields.FirstOrDefault(PatientContextWatcher.IsPatientIdField);
-            string observed = null;
+            PatientContext fresh;
             try
             {
-                var element = idField == null ? null : automation.Locate(context.Window.Element, idField);
-                if (element != null) automation.TryRead(element, out observed);
+                fresh = watcher.ReadNow(context);
             }
             catch (Exception ex)
             {
                 ShowError("Không đọc lại được mã BN trên HIS: " + ex.Message);
                 return;
             }
-            observed = (observed ?? string.Empty).Trim();
-            if (observed.Length == 0 || !SameId(observed, context.PatientId))
+            if (fresh == null || !SameId(fresh.PatientId, context.PatientId) ||
+                !SameText(fresh.PatientName, context.PatientName) || !SameText(fresh.BirthYear, context.BirthYear))
             {
                 MessageBox.Show("Hồ sơ trên HIS vừa thay đổi. Hãy mở đúng bệnh nhân rồi thử lại.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 watcher.DetectNow();
                 return;
             }
+            var observed = fresh.PatientId.Trim();
             if (match.HisPatientId.Length > 0 && !SameId(match.HisPatientId, observed))
             {
                 MessageBox.Show("Mã BN điều dưỡng xác nhận (" + match.HisPatientId + ") KHÁC mã BN đang mở trên HIS (" + observed + ").\r\nĐã dừng, không điền.",
@@ -622,7 +621,7 @@ namespace HisAdmissionAssistant
             if (match.Score < 100)
             {
                 var question = "Tờ khai " + match.Code + ": " + match.FullName + (match.BirthYear > 0 ? " (" + match.BirthYear + ")" : string.Empty) + "\r\n" +
-                    "Bệnh nhân đang mở trên HIS: " + context.Describe() + "\r\n\r\n" +
+                    "Bệnh nhân đang mở trên HIS: " + fresh.Describe() + "\r\n\r\n" +
                     "Điều dưỡng chưa gắn mã BN cho tờ khai này. Bạn xác nhận đây là CÙNG MỘT NGƯỜI?";
                 if (MessageBox.Show(question, "Xác nhận đúng bệnh nhân", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                     return;
@@ -819,6 +818,13 @@ namespace HisAdmissionAssistant
         {
             Func<string, string> fold = s => new string((s ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
             return fold(a).Length > 0 && fold(a) == fold(b);
+        }
+
+        /// <summary>Same displayed text ignoring case, spacing and punctuation (both empty counts as same).</summary>
+        private static bool SameText(string a, string b)
+        {
+            Func<string, string> fold = s => new string((s ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+            return fold(a) == fold(b);
         }
 
         private AutomationProfile FindLoadedProfile(string name)

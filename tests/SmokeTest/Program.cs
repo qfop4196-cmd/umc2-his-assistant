@@ -36,6 +36,8 @@ namespace SmokeTest
             {
                 process = Process.Start(args[0]);
                 process.WaitForInputIdle(5000);
+                var started = process;
+                Console.CancelKeyPress += delegate { CloseQuietly(started); }; // Ctrl+C must not leave Mock HIS running
 
                 var service = new UiaAutomationService();
                 var profile = MockProfile();
@@ -113,11 +115,57 @@ namespace SmokeTest
                     throw new InvalidOperationException("Dangerous save selector was not blocked.");
                 AssertSaveCountZero(target.Element);
 
-                // 7. Auto-detection of the patient open on screen, including switching patient.
+                // 7. A target that cannot take text (read-only box, a button) blocks the WHOLE fill before anything is written.
+                var blocked = new[]
+                {
+                    Field("PatientId", "mabn", "Verify", "BN-TEST-001", false, true),
+                    Field("PreliminaryDiagnosis", "sobo", "Set", "MUST-NOT-BE-WRITTEN", true, false),
+                    Field("Note", "hoten", "Set", "MUST-NOT-BE-WRITTEN", false, false),
+                    Field("Treatment", "butBoqua", "Set", "MUST-NOT-BE-WRITTEN", false, false)
+                };
+                var blockedResults = service.Apply(target.Element, blocked);
+                if (blockedResults.Any(r => r.Changed) || blockedResults.Count(r => r.Message.StartsWith("Không ghi được")) != 2)
+                    throw new InvalidOperationException("Non-writable targets were not blocked in preflight: " +
+                        string.Join(" | ", blockedResults.Select(r => r.Field.Key + "=" + r.Message).ToArray()));
+                AssertValue(target.Element, "sobo", string.Empty);
+                AssertValue(target.Element, "hoten", "NGUYỄN VĂN TEST");
+
+                // 8. Joined read-only selector ("mabn1+mabn3" on UMC2HIS khám bệnh): verify, abort on mismatch, never write.
+                var joined = new[]
+                {
+                    Field("PatientId", "mabn+namsinh", "Verify", "BN-TEST-001 1970", false, true),
+                    Field("Treatment", "xuli", "Set", "SMOKE-JOINED", true, false)
+                };
+                var joinedResults = service.Apply(target.Element, joined);
+                if (joinedResults.Count(r => r.Changed) != 1 || joinedResults.First(r => r.Changed).Message != "Đã điền")
+                    throw new InvalidOperationException("Joined verify/write-back failed: " + string.Join(" | ", joinedResults.Select(r => r.Message).ToArray()));
+                AssertValue(target.Element, "xuli", "SMOKE-JOINED");
+                joined[0].Value = "BN-TEST-001";
+                joined[1].Value = "MUST-NOT-BE-WRITTEN";
+                if (service.Apply(target.Element, joined).Any(r => r.Changed))
+                    throw new InvalidOperationException("Joined verify accepted a partial patient code.");
+                AssertValue(target.Element, "xuli", "SMOKE-JOINED");
+                var joinedWrite = new[] { Field("Note", "chuy+sobo", "Set", "MUST-NOT-BE-WRITTEN", false, false) };
+                if (service.Apply(target.Element, joinedWrite).Any(r => r.Changed))
+                    throw new InvalidOperationException("A joined selector was used for writing.");
+                var shapes = service.ValidateMappings(target.Element, new[] { Field("PatientId", "mabn+namsinh", "Verify", string.Empty, false, true) });
+                if (shapes.Count != 1 || !shapes[0].Message.Contains("mabn: 11 ký tự") || !shapes[0].Message.Contains("namsinh: 4 chữ số") ||
+                    shapes[0].Message.Contains("TEST") || shapes[0].Message.Contains("1970"))
+                    throw new InvalidOperationException("Selector check must describe (not reveal) identity values: " + (shapes.Count > 0 ? shapes[0].Message : "none"));
+                using (var reader = new PatientContextWatcher(service))
+                {
+                    var joinedProfile = MockProfile();
+                    joinedProfile.Fields[0].AutomationId = "mabn+namsinh";
+                    var now = reader.ReadNow(new PatientContext { Profile = joinedProfile, Window = target, WindowHandle = target.Element.Current.NativeWindowHandle });
+                    if (now == null || now.PatientId != "BN-TEST-0011970" || now.PatientName != "NGUYỄN VĂN TEST" || now.BirthYear != "1970")
+                        throw new InvalidOperationException("ReadNow with a joined code failed: " + (now == null ? "null" : now.Describe()));
+                }
+
+                // 9. Auto-detection of the patient open on screen, including switching patient.
                 var detection = DetectionTest(service, profile, target);
 
-                Console.WriteLine("PASS: write, read-only identity, CRLF/flatten, existing-content check, patient-mismatch abort, " +
-                    "no-guess selector, save-selector block, " + detection + "; save count remains zero.");
+                Console.WriteLine("PASS: write + read-back, read-only identity, CRLF/flatten, existing-content check, patient-mismatch abort, " +
+                    "no-guess selector, save-selector block, non-writable preflight block, joined code selector, " + detection + "; save count remains zero.");
                 return 0;
             }
             catch (Exception ex)
@@ -127,11 +175,21 @@ namespace SmokeTest
             }
             finally
             {
-                if (process != null && !process.HasExited)
-                {
-                    process.CloseMainWindow();
-                    process.WaitForExit(3000);
-                }
+                CloseQuietly(process);
+            }
+        }
+
+        private static void CloseQuietly(Process process)
+        {
+            try
+            {
+                if (process == null || process.HasExited) return;
+                process.CloseMainWindow();
+                if (!process.WaitForExit(3000)) process.Kill();
+            }
+            catch (Exception)
+            {
+                // Already gone or not ours to stop: nothing else to clean up.
             }
         }
 

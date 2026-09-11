@@ -60,17 +60,19 @@ Việc đưa dữ liệu sức khỏe qua Internet cần phòng CNTT và bộ ph
 ## Hiệu chỉnh selector tại máy HIS
 
 - Tab **Hiệu chỉnh UIA** → **Quét control** hoặc **Bắt control sau 3 giây** để lấy `AutomationId` thật của từng ô trên UMC2HIS; bấm **Lưu profile** (lưu vào `%LOCALAPPDATA%\UMC2\HisAdmissionAssistant\Profiles`, không chứa dữ liệu bệnh nhân).
-- Nhận diện bệnh nhân dựa vào trường `PatientId` (`Verify`) của profile. Nên bắt thêm hai trường chỉ đọc **Họ tên BN** (`PatientName`) và **Năm sinh BN** (`BirthYear`) — chế độ `Read`, không bao giờ bị ghi — để ghép được cả tờ khai điều dưỡng chưa gắn mã BN.
+- Nhận diện bệnh nhân dựa vào trường `PatientId` (`Verify`) của profile, cộng hai trường chỉ đọc **Họ tên BN** (`PatientName` = `hoten`) và **Năm sinh BN** (`BirthYear` = `namsinh`, chỉ có trên màn hình Khám bệnh) — chế độ `Read`, không bao giờ bị ghi — để ghép được cả tờ khai điều dưỡng chưa gắn mã BN. Mỗi lần dò, trợ lý đọc lại cả mã, họ tên, năm sinh; trước khi điền đọc lại lần nữa và dừng nếu bất kỳ giá trị nào đổi.
+- Selector ghép `a+b` (ví dụ `mabn1+mabn3`) chỉ dùng cho trường Đọc/Đối chiếu: nối giá trị các ô; thiếu một ô là coi như chưa mở bệnh nhân.
+- Trước khi ghi, mọi ô đích được kiểm tra: ô chỉ đọc hoặc không nhận chữ (ví dụ ô tra cứu ICD/khoa) làm dừng toàn bộ lượt điền; sau khi ghi, trợ lý đọc lại từng ô và báo nếu HIS hiển thị khác.
 - Trường không có `AutomationId`/`Name` sẽ không được điền (không còn đoán "ô Edit đầu tiên").
 
 ## Kiểm thử không dùng dữ liệu thật
 
 - `.\build.ps1 -Test`: khởi động máy chủ với dữ liệu tạm, chạy 25 kiểm tra (gửi tờ khai, đồng ý xử lý dữ liệu, tách cổng, CSRF, thiết lập, duyệt, ghép nối, tự dò tìm, ghép theo mã BN, chặn sai bệnh nhân, nhận/hoàn tất, thu hồi, mã hóa, nhật ký sạch).
-- `.\build.ps1 -Smoke`: mở Mock HIS và kiểm tra điền, trường chỉ đọc, xuống dòng CRLF, không ghi đè, hủy khi sai BN, chặn nút Lưu, tự nhận diện và đổi bệnh nhân. Bộ đếm **Số lần bấm Lưu** phải luôn là `0`.
+- `.\build.ps1 -Smoke`: mở Mock HIS và kiểm tra điền + đọc lại, trường chỉ đọc, xuống dòng CRLF, không ghi đè, hủy khi sai BN, chặn nút Lưu, dừng khi có ô không ghi được, mã BN ghép hai ô, tự nhận diện và đổi bệnh nhân. Bộ đếm **Số lần bấm Lưu** phải luôn là `0`.
 - Thử tay: chạy `tools\MockHis\bin\Release\MockHis.exe`, chọn bệnh nhân thử, duyệt một tờ khai với mã `BN-TEST-001` trên trang điều dưỡng rồi dùng profile **Kiểm thử — Mock HIS**.
 
 ## Giới hạn hiện tại
 
-- `AutomationId` trong profile UMC2 lấy từ metadata assembly, cần xác nhận trên máy HIS thật (đặc biệt DotNetBar, `ListLookupICD`, `MaskedBox`, DevExpress). Họ tên/năm sinh trên màn hình HIS chưa có selector — cần bắt một lần.
+- `AutomationId` trong profile UMC2 lấy từ metadata assembly (kể cả họ tên `hoten`, năm sinh `namsinh`, mã BN ghép `mabn1+mabn3` trên màn hình Khám bệnh — xem `ANALYSIS.md`), cần xác nhận một lần trên máy HIS thật bằng **Kiểm tra selector**. Ô tra cứu ICD/khoa (UserControl DevExpress) không điền được qua UI Automation — bác sĩ chọn trên HIS.
 - Máy chủ phải bật thì người bệnh mới khai được; nên đặt trên máy chạy liên tục.
 - Chế độ cũ (tab **Đồng bộ webapp**, gói pilot JSON, `/api/agent/jobs/*`) vẫn dùng được và tương thích với máy chủ mới.

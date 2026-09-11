@@ -54,7 +54,9 @@ namespace HisAdmissionAssistant
     /// <summary>
     /// Background observer: finds which HIS form/patient is in the foreground by reading the profile's PatientId (Verify)
     /// field and optional PatientName/BirthYear (Read) fields. Never writes. Uses cached UIA elements so steady-state
-    /// polling costs a single ValuePattern read, and backs off when the foreground HIS window has no patient field.
+    /// polling costs a few ValuePattern reads (code, name, birth year — all re-read so a reused code box cannot hide a
+    /// patient switch), and backs off when the foreground HIS window has no patient field. The patient code may be a
+    /// joined selector ("mabn1+mabn3") when HIS shows it as a year prefix box plus a number box.
     /// </summary>
     public sealed class PatientContextWatcher : IDisposable
     {
@@ -70,9 +72,9 @@ namespace HisAdmissionAssistant
         private PatientContext current;
         private int cachedHandle;
         private AutomationProfile cachedProfile;
-        private AutomationElement cachedId;
-        private AutomationElement cachedName;
-        private AutomationElement cachedBirth;
+        private AutomationElement[] cachedId;
+        private AutomationElement[] cachedName;
+        private AutomationElement[] cachedBirth;
         private int missHandle;
         private DateTime missUntilUtc;
 
@@ -188,14 +190,13 @@ namespace HisAdmissionAssistant
             var force = forceSlowPath;
             forceSlowPath = false;
 
-            if (!force && handle == cachedHandle && cachedId != null)
+            var cachedParts = cachedId;
+            if (!force && handle == cachedHandle && cachedParts != null)
             {
                 string id;
-                if (IsShown(cachedId) && automation.TryRead(cachedId, out id) && !string.IsNullOrWhiteSpace(id))
+                if (IsShown(cachedParts[0]) && automation.TryReadParts(cachedParts, string.Empty, out id) && UiaAutomationService.IsPlausiblePatientId(id))
                 {
-                    var previous = Current;
-                    if (previous != null && previous.WindowHandle == handle && string.Equals(previous.PatientId, id.Trim(), StringComparison.OrdinalIgnoreCase))
-                        return; // unchanged
+                    // Publish() drops it when code, name and birth year are all unchanged.
                     Publish(Build(window, handle, cachedProfile, id.Trim(), cachedName, cachedBirth));
                     return;
                 }
@@ -209,13 +210,13 @@ namespace HisAdmissionAssistant
                 if (!SplitNames(profile.ProcessNames).Contains(window.ProcessName, StringComparer.OrdinalIgnoreCase) && SplitNames(profile.ProcessNames).Any()) continue;
                 if (!TitleMatches(profile, window.Title)) continue;
                 var idField = profile.Fields.First(IsPatientIdField);
-                var element = automation.Locate(window.Element, idField);
-                if (element == null || !IsShown(element)) continue;
+                var parts = automation.LocateParts(window.Element, idField);
+                if (parts == null || !IsShown(parts[0])) continue;
                 string id;
-                if (!automation.TryRead(element, out id) || string.IsNullOrWhiteSpace(id)) continue;
+                if (!automation.TryReadParts(parts, string.Empty, out id) || !UiaAutomationService.IsPlausiblePatientId(id)) continue;
                 cachedHandle = handle;
                 cachedProfile = profile;
-                cachedId = element;
+                cachedId = parts;
                 cachedName = LocateRead(window.Element, profile, "PatientName");
                 cachedBirth = LocateRead(window.Element, profile, "BirthYear") ?? LocateRead(window.Element, profile, "BirthDate");
                 Publish(Build(window, handle, profile, id.Trim(), cachedName, cachedBirth));
@@ -228,10 +229,11 @@ namespace HisAdmissionAssistant
             // No patient field in this foreground window (e.g. an ICD lookup dialog of the same HIS process):
             // keep the current patient while its form is still open, instead of flapping to "no patient".
             var existing = Current;
-            if (existing != null && cachedId != null && existing.Window != null && existing.Window.ProcessId == window.ProcessId)
+            cachedParts = cachedId;
+            if (existing != null && cachedParts != null && existing.Window != null && existing.Window.ProcessId == window.ProcessId)
             {
                 string stillOpen;
-                if (automation.TryRead(cachedId, out stillOpen) && string.Equals((stillOpen ?? string.Empty).Trim(), existing.PatientId, StringComparison.OrdinalIgnoreCase))
+                if (automation.TryReadParts(cachedParts, string.Empty, out stillOpen) && string.Equals((stillOpen ?? string.Empty).Trim(), existing.PatientId, StringComparison.OrdinalIgnoreCase))
                     return;
             }
             cachedHandle = handle;
@@ -239,14 +241,33 @@ namespace HisAdmissionAssistant
             Publish(null);
         }
 
-        private PatientContext Build(TargetWindow window, int handle, AutomationProfile profile, string id, AutomationElement name, AutomationElement birth)
+        /// <summary>
+        /// Re-reads, right now and without the cache, the identity shown in the window of <paramref name="context"/>
+        /// (used just before filling). Null when that window no longer shows a patient code.
+        /// </summary>
+        public PatientContext ReadNow(PatientContext context)
+        {
+            if (context == null || context.Profile == null || context.Window == null || context.Window.Element == null) return null;
+            var profile = context.Profile;
+            var idField = profile.Fields.FirstOrDefault(IsPatientIdField);
+            if (idField == null) return null;
+            var root = context.Window.Element;
+            string id;
+            var parts = automation.LocateParts(root, idField);
+            if (parts == null || !automation.TryReadParts(parts, string.Empty, out id) || !UiaAutomationService.IsPlausiblePatientId(id)) return null;
+            return Build(context.Window, context.WindowHandle, profile, id.Trim(),
+                LocateRead(root, profile, "PatientName"),
+                LocateRead(root, profile, "BirthYear") ?? LocateRead(root, profile, "BirthDate"));
+        }
+
+        private PatientContext Build(TargetWindow window, int handle, AutomationProfile profile, string id, AutomationElement[] name, AutomationElement[] birth)
         {
             string patientName = string.Empty, birthYear = string.Empty;
-            if (name != null) automation.TryRead(name, out patientName);
+            if (name != null) automation.TryReadParts(name, " ", out patientName);
             if (birth != null)
             {
                 string raw;
-                if (automation.TryRead(birth, out raw))
+                if (automation.TryReadParts(birth, " ", out raw))
                 {
                     var match = Regex.Match(raw ?? string.Empty, @"(19|20)\d{2}");
                     birthYear = match.Success ? match.Value : string.Empty;
@@ -264,10 +285,10 @@ namespace HisAdmissionAssistant
             };
         }
 
-        private AutomationElement LocateRead(AutomationElement root, AutomationProfile profile, string key)
+        private AutomationElement[] LocateRead(AutomationElement root, AutomationProfile profile, string key)
         {
             var field = profile.Fields.FirstOrDefault(f => string.Equals(f.Key, key, StringComparison.OrdinalIgnoreCase) && UiaAutomationService.HasSelector(f));
-            return field == null ? null : automation.Locate(root, field);
+            return field == null ? null : automation.LocateParts(root, field);
         }
 
         private void Publish(PatientContext next)

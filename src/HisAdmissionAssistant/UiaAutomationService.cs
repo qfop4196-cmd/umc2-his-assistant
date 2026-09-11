@@ -145,7 +145,8 @@ namespace HisAdmissionAssistant
         public IList<FieldResult> ValidateMappings(AutomationElement window, IEnumerable<FieldMapping> fields)
         {
             var results = new List<FieldResult>();
-            foreach (var field in fields.Where(f => f.EnabledForFill))
+            // Identity (Read/Verify) fields are always checked: they are what calibration on a new HIS screen is about.
+            foreach (var field in fields.Where(f => f.EnabledForFill || IsReadOnly(f) || IsVerify(f)))
             {
                 try
                 {
@@ -159,10 +160,26 @@ namespace HisAdmissionAssistant
                         results.Add(Result(field, false, false, "Chưa gán selector (AutomationId/Name)"));
                         continue;
                     }
-                    var element = FindField(window, field);
-                    results.Add(element == null
-                        ? Result(field, false, false, "Không tìm thấy")
-                        : Result(field, true, false, element.Current.IsEnabled ? "Đã tìm thấy" : "Đã tìm thấy nhưng đang bị khóa"));
+                    var parts = LocateParts(window, field);
+                    if (parts == null)
+                    {
+                        results.Add(Result(field, false, false, IsComposite(field) ? "Không tìm thấy đủ các control của selector ghép" : "Không tìm thấy"));
+                        continue;
+                    }
+                    if (IsVerify(field) || IsReadOnly(field))
+                    {
+                        results.Add(Result(field, true, false, "Đã tìm thấy · " + DescribeParts(field, parts)));
+                        continue;
+                    }
+                    if (IsComposite(field))
+                    {
+                        results.Add(Result(field, true, false, "Selector ghép (a+b) chỉ dùng cho trường Đọc/Đối chiếu"));
+                        continue;
+                    }
+                    var blocker = WriteBlocker(parts[0]);
+                    results.Add(blocker != null
+                        ? Result(field, true, false, "Đã tìm thấy nhưng " + blocker)
+                        : Result(field, true, false, parts[0].Current.IsEnabled ? "Đã tìm thấy" : "Đã tìm thấy nhưng đang bị khóa"));
                 }
                 catch (Exception ex)
                 {
@@ -200,34 +217,36 @@ namespace HisAdmissionAssistant
                     continue;
                 }
 
-                AutomationElement element;
-                try { element = FindField(window, field); }
+                if (IsComposite(field) && !IsVerify(field))
+                {
+                    results.Add(Result(field, false, false, "Lỗi selector: selector ghép (a+b) chỉ dùng để đọc/đối chiếu, không dùng để điền"));
+                    preflightFailed = true;
+                    continue;
+                }
+
+                AutomationElement[] parts;
+                try { parts = LocateParts(window, field); }
                 catch (Exception ex)
                 {
                     results.Add(Result(field, false, false, "Lỗi selector: " + ex.Message));
                     preflightFailed = true;
                     continue;
                 }
-                if (element == null)
+                if (parts == null)
                 {
                     results.Add(Result(field, false, false, "Không tìm thấy control"));
                     if (field.Required || !string.IsNullOrWhiteSpace(field.Value)) preflightFailed = true;
                     continue;
                 }
-                if (!element.Current.IsEnabled)
-                {
-                    results.Add(Result(field, true, false, "Control đang bị khóa"));
-                    preflightFailed = true;
-                    continue;
-                }
-                resolved[field] = element;
+                var element = parts[0];
 
                 if (IsVerify(field))
                 {
+                    // Display-only patient-ID boxes are often disabled on HIS; reading them is fine, so no IsEnabled check here.
                     string actual;
-                    if (!TryReadValue(element, out actual))
+                    if (!TryReadParts(parts, string.Empty, out actual))
                     {
-                        results.Add(Result(field, true, false, "Không đọc được để đối chiếu"));
+                        results.Add(Result(field, true, false, IsComposite(field) ? "Không đọc đủ các phần của mã để đối chiếu" : "Không đọc được để đối chiếu"));
                         preflightFailed = true;
                     }
                     else if (!EqualNormalized(actual, field.Value))
@@ -239,7 +258,26 @@ namespace HisAdmissionAssistant
                     {
                         results.Add(Result(field, true, false, "Đối chiếu khớp"));
                     }
+                    resolved[field] = element;
+                    continue;
                 }
+
+                if (!element.Current.IsEnabled)
+                {
+                    results.Add(Result(field, true, false, "Control đang bị khóa"));
+                    preflightFailed = true;
+                    continue;
+                }
+                // Every target must accept text BEFORE anything is written, so a lookup box (e.g. ICD/khoa UserControl)
+                // or a read-only box cannot leave the form half filled.
+                var blocker = WriteBlocker(element);
+                if (blocker != null)
+                {
+                    results.Add(Result(field, true, false, "Không ghi được: " + blocker));
+                    preflightFailed = true;
+                    continue;
+                }
+                resolved[field] = element;
             }
 
             if (preflightFailed)
@@ -252,17 +290,36 @@ namespace HisAdmissionAssistant
 
             foreach (var field in selected.Where(f => !IsVerify(f) && resolved.ContainsKey(f) && !string.IsNullOrWhiteSpace(f.Value)))
             {
+                var text = PrepareText(field);
                 try
                 {
-                    SetElementValue(resolved[field], PrepareText(field));
-                    results.Add(Result(field, true, true, "Đã điền"));
+                    SetElementValue(resolved[field], text);
                 }
                 catch (Exception ex)
                 {
                     results.Add(Result(field, true, false, "Không điền được: " + ex.Message));
+                    continue;
                 }
+                results.Add(ReadBack(field, resolved[field], text));
             }
             return OrderResults(selected, results);
+        }
+
+        /// <summary>
+        /// Confirms the HIS control now shows what was written: catches custom controls that accept a UIA write but ignore it.
+        /// Formatting differences (spaces, line breaks, punctuation) are tolerated.
+        /// </summary>
+        private static FieldResult ReadBack(FieldMapping field, AutomationElement element, string written)
+        {
+            string shown = null;
+            bool readable;
+            try { readable = TryReadValue(element, out shown); }
+            catch (ElementNotAvailableException) { readable = false; }
+            catch (InvalidOperationException) { readable = false; }
+            if (!readable) return Result(field, true, true, "Đã điền (không đọc lại được để kiểm tra)");
+            if (EqualNormalized(shown, written)) return Result(field, true, true, "Đã điền");
+            if (string.IsNullOrWhiteSpace(shown)) return Result(field, true, false, "Không điền được: HIS không nhận giá trị");
+            return Result(field, true, true, "Không khớp sau khi điền — HIS đang hiển thị nội dung khác, hãy xem lại ô này");
         }
 
         public void InvokeAuthorizedAction(AutomationElement window, UiActionMapping action, string actionLabel)
@@ -288,11 +345,70 @@ namespace HisAdmissionAssistant
             ((InvokePattern)pattern).Invoke();
         }
 
-        /// <summary>Finds the control for a field (null when not found or the field has no selector).</summary>
+        /// <summary>Finds the control for a single-control field (null when not found, no selector, or a joined "a+b" selector).</summary>
         public AutomationElement Locate(AutomationElement window, FieldMapping field)
         {
-            if (window == null || field == null || !HasSelector(field)) return null;
+            if (window == null || field == null || !HasSelector(field) || IsComposite(field)) return null;
             return FindField(window, field);
+        }
+
+        /// <summary>
+        /// Controls behind a field: one element, or one per part for a joined read-only selector such as "mabn1+mabn3"
+        /// (HIS screens that show the patient code as a year prefix box + a number box). Null when any part is missing.
+        /// </summary>
+        public AutomationElement[] LocateParts(AutomationElement window, FieldMapping field)
+        {
+            if (window == null || field == null || !HasSelector(field)) return null;
+            var ids = SplitComposite(field.AutomationId);
+            if (ids.Length <= 1)
+            {
+                var single = FindField(window, field);
+                return single == null ? null : new[] { single };
+            }
+            var parts = new AutomationElement[ids.Length];
+            for (var i = 0; i < ids.Length; i++)
+            {
+                var part = field.CloneWithoutValue();
+                part.AutomationId = ids[i];
+                part.Name = string.Empty;
+                parts[i] = FindField(window, part);
+                if (parts[i] == null) return null;
+            }
+            return parts;
+        }
+
+        /// <summary>
+        /// Reads and joins the controls found by <see cref="LocateParts"/>. A joined selector needs every part non-empty:
+        /// an empty number box next to a pre-filled year prefix means "no patient open", not patient "24".
+        /// </summary>
+        public bool TryReadParts(AutomationElement[] parts, string separator, out string value)
+        {
+            value = string.Empty;
+            if (parts == null || parts.Length == 0) return false;
+            if (parts.Length == 1) return TryRead(parts[0], out value);
+            var pieces = new List<string>();
+            foreach (var part in parts)
+            {
+                string text;
+                if (!TryRead(part, out text)) return false;
+                text = (text ?? string.Empty).Trim();
+                if (text.Length == 0) return false;
+                pieces.Add(text);
+            }
+            value = string.Join(separator ?? string.Empty, pieces.ToArray());
+            return true;
+        }
+
+        /// <summary>True for a joined read-only selector ("mabn1+mabn3"): AutomationIds joined with '+'.</summary>
+        public static bool IsComposite(FieldMapping field)
+        {
+            return field != null && SplitComposite(field.AutomationId).Length > 1;
+        }
+
+        /// <summary>A usable patient code has at least 3 letters/digits (a lone 2-digit year prefix is not one).</summary>
+        public static bool IsPlausiblePatientId(string value)
+        {
+            return (value ?? string.Empty).Count(char.IsLetterOrDigit) >= 3;
         }
 
         /// <summary>Reads the current text of a control without changing it.</summary>
@@ -446,17 +562,67 @@ namespace HisAdmissionAssistant
             try { element.SetFocus(); }
             catch (InvalidOperationException) { }
             object pattern;
+            var readOnly = false;
             if (element.TryGetCurrentPattern(ValuePattern.Pattern, out pattern))
             {
                 var valuePattern = (ValuePattern)pattern;
-                if (valuePattern.Current.IsReadOnly)
-                    throw new InvalidOperationException("Control được UIA đánh dấu chỉ đọc.");
-                valuePattern.SetValue(value);
-                return;
+                if (!valuePattern.Current.IsReadOnly)
+                {
+                    valuePattern.SetValue(value);
+                    return;
+                }
+                readOnly = true; // a drop-down list reports a read-only value but can still be selected below
             }
-            if (TrySetNativeText(element, value)) return;
+            if (!readOnly && TrySetNativeText(element, value)) return;
             if (TrySelectItem(element, value)) return;
-            throw new InvalidOperationException("Control không hỗ trợ UIA ValuePattern hoặc chọn danh sách.");
+            throw new InvalidOperationException(readOnly
+                ? "Control được UIA đánh dấu chỉ đọc."
+                : "Control không hỗ trợ UIA ValuePattern hoặc chọn danh sách.");
+        }
+
+        /// <summary>Why a control cannot take text through UIA (null = writable). Mirrors the paths in <see cref="SetElementValue"/>.</summary>
+        private static string WriteBlocker(AutomationElement element)
+        {
+            var type = element.Current.ControlType;
+            var isList = type == ControlType.ComboBox || type == ControlType.List || type == ControlType.ListItem;
+            object pattern;
+            if (element.TryGetCurrentPattern(ValuePattern.Pattern, out pattern))
+            {
+                if (!((ValuePattern)pattern).Current.IsReadOnly || isList) return null;
+                return "ô này đang chỉ đọc trên HIS";
+            }
+            if ((type == ControlType.Edit || type == ControlType.Document) && element.Current.NativeWindowHandle != 0) return null;
+            if (isList) return null;
+            var kind = CleanControlType(type);
+            return "control dạng " + (kind.Length == 0 ? "không rõ" : kind) +
+                " không nhận chữ qua UI Automation (ví dụ ô tra cứu ICD/khoa) — hãy chọn trực tiếp trên HIS hoặc bỏ chọn trường này";
+        }
+
+        /// <summary>"mabn1: 2 chữ số · mabn3: 6 chữ số" — what a read field currently holds, without revealing the content.</summary>
+        private string DescribeParts(FieldMapping field, AutomationElement[] parts)
+        {
+            var ids = SplitComposite(field.AutomationId);
+            var pieces = new List<string>();
+            for (var i = 0; i < parts.Length; i++)
+            {
+                string text;
+                var shape = TryRead(parts[i], out text) ? DescribeShape(text) : "không đọc được";
+                if (parts.Length > 1 && i < ids.Length) pieces.Add(ids[i] + ": " + shape);
+                else pieces.Add(shape == "trống" ? "đang trống" : "đọc được " + shape);
+            }
+            return string.Join(" · ", pieces.ToArray());
+        }
+
+        private static string DescribeShape(string text)
+        {
+            var value = (text ?? string.Empty).Trim();
+            if (value.Length == 0) return "trống";
+            return value.Length + (value.All(char.IsDigit) ? " chữ số" : " ký tự");
+        }
+
+        private static string[] SplitComposite(string automationId)
+        {
+            return (automationId ?? string.Empty).Split('+').Select(s => s.Trim()).Where(s => s.Length > 0).ToArray();
         }
 
         private static bool TrySelectItem(AutomationElement element, string value)

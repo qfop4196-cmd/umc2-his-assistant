@@ -1,13 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  MQHIS.frmKhambenhDHYD và MQHIS.frmKhambenh1 (UMC2HIS.exe) dùng cùng tên control. Theo metadata assembly:
+  hoten = TextBox, namsinh = MaskedTextBox, ngaysinh = MaskedBox; mã BN hiển thị ở 2 ô mabn1 (MaskedTextBox) + mabn3
+  (MaskedTextBox, có sự kiện mabn3_Validated) nên đối chiếu bằng selector ghép "mabn1+mabn3" (chỉ đọc).
+  Nếu "Kiểm tra selector" cho thấy mabn1 đã chứa đủ mã, đổi AutomationId của PatientId thành "mabn1".
+  icd_chinh (ListLookupICD.ListLookUp) và khoa (ListLookup.ListLookUp) là UserControl tra cứu, không nhận chữ qua
+  UI Automation: bác sĩ chọn trực tiếp trên HIS, trợ lý không điền hai ô này.
+-->
 <AutomationProfile Name="UMC2HIS — Khám bệnh và chỉ định nhập viện" WindowTitleRegex=".*" ProcessNames="UMC2HIS,MQHIS" StopBeforeSave="true">
   <Fields>
-    <Field Key="PatientId" Label="Mã bệnh nhân (đối chiếu)" AutomationId="mabn1" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Verify" />
-    <Field Key="PatientName" Label="Họ tên BN (chỉ đọc – hiệu chỉnh bằng Bắt control)" AutomationId="" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Read" />
-    <Field Key="BirthYear" Label="Năm sinh BN (chỉ đọc – hiệu chỉnh bằng Bắt control)" AutomationId="" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Read" />
+    <Field Key="PatientId" Label="Mã bệnh nhân (đối chiếu: ô năm mabn1 + ô số mabn3)" AutomationId="mabn1+mabn3" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Verify" />
+    <Field Key="PatientName" Label="Họ tên BN (chỉ đọc, để nhận diện)" AutomationId="hoten" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Read" />
+    <Field Key="BirthYear" Label="Năm sinh BN (chỉ đọc, để nhận diện)" AutomationId="namsinh" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Read" />
     <Field Key="ReasonForAdmission" Label="Lý do khám/vào viện" AutomationId="lydo" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="true" Multiline="true" Operation="Set" />
     <Field Key="Symptoms" Label="Triệu chứng" AutomationId="trieuchung" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
-    <Field Key="PrimaryIcd" Label="ICD-10 chính" AutomationId="icd_chinh" Name="" ControlType="" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
-    <Field Key="Department" Label="Khoa nhập viện" AutomationId="khoa" Name="" ControlType="" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
     <Field Key="DoctorCode" Label="Mã bác sĩ" AutomationId="mabs" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
     <Field Key="DoctorName" Label="Bác sĩ điều trị" AutomationId="tenbs" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />
     <Field Key="AdmissionNumber" Label="Số vào viện" AutomationId="sovaovien" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Set" />

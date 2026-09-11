@@ -45,7 +45,7 @@ Quên mật khẩu quản trị: `"C:\Program Files\UMC2\IntakeServer\IntakeServ
 
 1. Mở hồ sơ một bệnh nhân **thử** trên màn hình Phiếu khám vào viện / Khám bệnh.
 2. Trong trợ lý, tab **Hiệu chỉnh UIA → Quét control**; kiểm tra các `AutomationId` như `mabn`, `lydo`, `benhly`… có đúng không. Ô nào sai: chọn trường ở tab **Nhập liệu**, bấm **Bắt control sau 3 giây** và rê chuột lên ô đó trên HIS.
-3. Bắt thêm **Họ tên BN** và **Năm sinh BN** (trường chỉ đọc) để ghép được tờ khai chưa có mã BN.
+3. Bấm **Kiểm tra selector**: profile đã có sẵn **Họ tên BN** (`hoten`) và **Năm sinh BN** (`namsinh`, chỉ màn hình Khám bệnh); mã BN màn hình Khám bệnh đọc từ 2 ô `mabn1+mabn3`. Trạng thái chỉ báo số chữ số (ví dụ "mabn1: 2 chữ số · mabn3: 6 chữ số"), không hiện giá trị. Nếu `mabn1` đã đủ mã thì sửa `PatientId` thành `mabn1`.
 4. **Lưu profile**. Kiểm tra: bảng gọn phải hiện đúng *Mã BN · Họ tên (năm sinh)* khi mở hồ sơ.
 5. Thử trọn luồng với bệnh nhân thử theo `PILOT-CHECKLIST.md` trước khi dùng thật.
 

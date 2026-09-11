@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  MQEMR.frmKhambenhvv (có trong MQEMR.exe và MQEMR.dll; biến thể frmKhambenhvvmat/frmKhambenhvvtmh dùng cùng tên ô chữ nhưng không có ô sinh hiệu).
+  Tên control lấy từ metadata assembly: mabn, hoten là TextBox; mach/nhiptho/cannang/cao là MaskedTextBox, nhietdo/huyetap là MaskedBox
+  (cả hai kế thừa TextBox nên UIA thấy là Edit). Phiếu này KHÔNG có ô năm sinh, nên chỉ nhận diện bằng mã BN + họ tên.
+-->
 <AutomationProfile Name="UMC2HIS — Phiếu khám vào viện" WindowTitleRegex=".*" ProcessNames="UMC2HIS,MQHIS,MQEMR" StopBeforeSave="true" CloudFormCode="admission_sheet" AllowSaveAfterFill="false">
   <Fields>
     <Field Key="PatientId" Label="Mã bệnh nhân (đối chiếu)" AutomationId="mabn" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="true" Multiline="false" Operation="Verify" />
-    <Field Key="PatientName" Label="Họ tên BN (chỉ đọc – hiệu chỉnh bằng Bắt control)" AutomationId="" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Read" />
-    <Field Key="BirthYear" Label="Năm sinh BN (chỉ đọc – hiệu chỉnh bằng Bắt control)" AutomationId="" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Read" />
+    <Field Key="PatientName" Label="Họ tên BN (chỉ đọc, để nhận diện)" AutomationId="hoten" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="false" Operation="Read" />
     <Field Key="ReasonForAdmission" Label="Lý do vào viện" AutomationId="lydo" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="true" Multiline="true" Operation="Set" />
     <Field Key="History" Label="Quá trình bệnh lý" AutomationId="benhly" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />
     <Field Key="PastHistory" Label="Tiền sử bản thân" AutomationId="banthan" Name="" ControlType="Edit" ClassName="" MatchIndex="0" Required="false" Multiline="true" Operation="Set" />

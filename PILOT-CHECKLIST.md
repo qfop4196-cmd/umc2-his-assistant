@@ -10,9 +10,10 @@
 
 ## Lượt 1 — Mock HIS (không cần HIS thật)
 
-1. Chạy `.\build.ps1 -Test -Smoke` trên máy lập trình: cả hai bước phải báo PASS.
-2. Mở `tools\MockHis\bin\Release\MockHis.exe`, chọn **BN-TEST-001**.
-3. Trên điện thoại/máy tính bảng: khai một tờ khai thử, ghi lại mã tờ khai.
+1. Bấm đúp `tools\Pilot\KIEM-THU-TU-DONG.cmd` (tương đương `.\build.ps1 -Test -Smoke`): phải báo **KẾT QUẢ: PASS**; nhật ký ở `dist\pilot\kiem-thu.log`.
+2. Bấm đúp `tools\Pilot\CHAY-THU-MOCK-HIS.cmd`: mở máy chủ tờ khai **tạm** (chỉ localhost, cổng 18080/18081, dữ liệu thử), Mock HIS và trợ lý. Trên Mock HIS chọn **BN-TEST-001**.
+   Trợ lý: tab **Tờ khai BN → Ghép nối máy chủ…** → `http://localhost:18080` + mã 6 số tạo ở **Quản trị → Máy bác sĩ** (lần đầu mở `http://localhost:18080/` để tạo tài khoản quản trị).
+3. Mở `http://localhost:18081/` (hoặc điện thoại cùng mạng khi dùng máy chủ thật): khai một tờ khai thử, ghi lại mã tờ khai.
 4. Trang điều dưỡng: tìm mã tờ khai → nhập mã BN `BN-TEST-001` → nhập sinh hiệu → **Duyệt & chuyển bác sĩ**.
 5. Đưa cửa sổ Mock HIS lên trước → trợ lý tự nhận profile **Kiểm thử — Mock HIS**, bảng gọn phải hiện **✔ Có tờ khai**.
 6. Bấm **ĐIỀN VÀO HIS** → kiểm tra các ô trên Mock HIS; bộ đếm **Số lần bấm Lưu** vẫn là 0.
@@ -22,8 +23,12 @@
 ## Lượt 2 — HIS thật, bệnh nhân thử
 
 1. Mở đúng hồ sơ bệnh nhân thử trên màn hình **Phiếu khám vào viện** (hoặc **Khám bệnh**).
-2. Tab **Hiệu chỉnh UIA → Quét control**: xác nhận `AutomationId` của mã BN và các ô cần điền; bắt thêm **Họ tên BN** và **Năm sinh BN**; **Lưu profile**.
-3. Bảng gọn phải hiện đúng *Mã BN · Họ tên (năm sinh)*. Nếu không: **Nhận diện lại**, kiểm tra selector `PatientId`.
+2. Tab **Hiệu chỉnh UIA → Kiểm tra selector** (profile đã có sẵn `hoten`, `namsinh`, mã BN). Cột trạng thái chỉ báo *số chữ số/ký tự*, không hiện giá trị:
+   - Phiếu khám vào viện: `PatientId` → "đọc được N chữ số" (ô `mabn`), `PatientName` → "đọc được … ký tự". Phiếu này **không có ô năm sinh**.
+   - Khám bệnh: `PatientId` → kiểu "mabn1: 2 chữ số · mabn3: 6 chữ số". Nếu `mabn1` đã đủ mã (ví dụ 8 chữ số) thì sửa `AutomationId` của `PatientId` thành `mabn1`; `BirthYear` → "đọc được 4 chữ số".
+   - Ô nào "Không tìm thấy": chọn trường đó, **Bắt control sau 3 giây**, rê chuột lên ô trên HIS → **Lưu profile**.
+3. Bảng gọn phải hiện đúng *Mã BN · Họ tên (năm sinh)* và so khớp với mã BN in trên HIS. Nếu không: **Nhận diện lại**, kiểm tra selector `PatientId`.
+   ICD-10 chính và Khoa là ô tra cứu — trợ lý không điền, bác sĩ chọn trên HIS.
 4. Khai tờ khai thử → điều dưỡng duyệt với đúng mã BN thử.
 5. Trợ lý: **ĐIỀN VÀO HIS** → kiểm tra trực tiếp từng trường, dấu xuống dòng, sinh hiệu → tự bấm **Lưu** trên HIS.
 6. Đóng và mở lại hồ sơ trên HIS để xác nhận dữ liệu thực sự đã lưu; bấm **✓ ĐÃ LƯU** trên trợ lý.
