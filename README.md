@@ -1,5 +1,13 @@
 # UMC2 HIS Suite — Tờ khai trước khám → Điều dưỡng duyệt → Điền vào HIS
 
+> ### 📘 Dành cho Ban Giám khảo
+> - **[Hướng dẫn sử dụng 4 ứng dụng (DOCX)](docs/huongdansudunggiamkhao.docx)** — link truy cập, tài khoản demo, từng bước thao tác, câu hỏi thường gặp
+> - **[Thể thức hoạt động của quy trình (DOCX)](docs/the-thuc-hoat-dong.docx)** — quy trình, cơ chế an toàn, phạm vi *giả lập* hiện tại so với triển khai thật
+> - **[Kịch bản demo 5 phút](docs/kich-ban-demo-5-phut.md)** · [Hồ sơ dự thi (PDF)](docs/du-thi/ho-so-du-thi.pdf)
+> - Tờ khai người bệnh: <https://qfop4196-cmd.github.io/umc2-his-assistant/redirect/?to=patient> · Trang điều dưỡng: <https://qfop4196-cmd.github.io/umc2-his-assistant/redirect/?to=staff>
+>
+> ⚠️ Bản dự thi là **bản giả lập**: dữ liệu giả, HIS được thay bằng Mock HIS, chưa kết nối UMC2HIS thật.
+
 Người bệnh tự khai thông tin trên điện thoại/máy tính bảng. Điều dưỡng đối chiếu, bổ sung sinh hiệu, gắn mã bệnh nhân HIS và **duyệt**. Khi bác sĩ mở hồ sơ bệnh nhân đó trên UMC2HIS, trợ lý trên máy bác sĩ **tự nhận ra** bệnh nhân, hiện tờ khai đã duyệt và **điền phần bác sĩ** (lý do khám, bệnh sử, tiền sử, dị ứng, sinh hiệu…) chỉ bằng một cú bấm. Bác sĩ vẫn kiểm tra và tự bấm **Lưu** trên HIS.
 
 Không sửa source hay database của HIS: việc điền dùng Microsoft UI Automation giống thao tác gõ phím, có kiểm tra trước và đối chiếu mã bệnh nhân.
