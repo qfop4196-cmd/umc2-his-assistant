@@ -12,7 +12,7 @@ namespace Umc2.IntakeServer
     internal sealed class StaffEndpoints
     {
         private const string SessionCookie = "umc2_staff";
-        private static readonly Regex IntakePath = new Regex("^/api/staff/intakes/([a-f0-9]{24})(/[a-z]+)?$", RegexOptions.Compiled);
+        private static readonly Regex IntakePath = new Regex("^/api/staff/intakes/([a-f0-9]{24})(/[a-z-]+)?$", RegexOptions.Compiled);
         private static readonly Regex DevicePath = new Regex("^/api/staff/devices/([a-f0-9]{24})/revoke$", RegexOptions.Compiled);
         private static readonly Regex UsernamePattern = new Regex("^[a-z0-9][a-z0-9._-]{2,31}$", RegexOptions.Compiled);
         private readonly ServerHost host;
@@ -65,6 +65,10 @@ namespace Umc2.IntakeServer
             {
                 case "POST /api/staff/password": ChangePassword(call); return;
                 case "GET /api/staff/intakes": ListIntakes(call); return;
+                case "GET /api/staff/stats": Stats(call); return;
+                case "GET /api/staff/export.xlsx": Export(call); return;
+                case "POST /api/staff/demo-data": RequireAdmin(call); SeedDemo(call); return;
+                case "POST /api/staff/ai/test": RequireAdmin(call); AiTest(call); return;
                 case "GET /api/staff/access": Access(call); return;
                 case "GET /api/staff/users": RequireAdmin(call); ListUsers(call); return;
                 case "POST /api/staff/users": RequireAdmin(call); SaveUser(call); return;
@@ -94,6 +98,8 @@ namespace Umc2.IntakeServer
                 if (call.Method == "POST" && action == "review") { Review(call, id); return; }
                 if (call.Method == "POST" && action == "reject") { Reject(call, id); return; }
                 if (call.Method == "POST" && action == "reopen") { Reopen(call, id); return; }
+                if (call.Method == "POST" && action == "ai") { AiForIntake(call, id); return; }
+                if (call.Method == "POST" && action == "ai-feedback") { AiFeedback(call, id); return; }
             }
             throw new ApiException(404, "not_found", "Không tìm thấy API.");
         }
@@ -113,6 +119,7 @@ namespace Umc2.IntakeServer
                 { "hospitalName", host.Config.Read(c => c.HospitalName) },
                 { "departmentName", host.Config.Read(c => c.DepartmentName) },
                 { "user", user },
+                { "aiEnabled", host.Ai.Enabled },
                 { "version", host.Version },
                 { "serverTime", TextUtil.Now() }
             });
@@ -339,10 +346,14 @@ namespace Umc2.IntakeServer
             var staffPort = host.Config.Read(c => c.StaffPort);
             var addresses = host.LanAddresses();
             var tunnel = host.Tunnel.Snapshot();
+            var staffTunnel = host.StaffTunnel.Snapshot();
             var configuredPublic = host.Config.Read(c => c.PublicBaseUrl);
             call.WriteJson(200, new Dictionary<string, object>
             {
                 { "hospitalName", host.Config.Read(c => c.HospitalName) },
+                { "demoMode", host.Config.Read(c => c.AllowPublicStaffAccess) },
+                { "demoStaffUrl", staffTunnel.PublicUrl ?? string.Empty },
+                { "demoStaffMessage", staffTunnel.Message ?? string.Empty },
                 { "lanPatientUrls", addresses.Select(a => "http://" + a + ":" + publicPort + "/").ToList() },
                 { "lanStaffUrls", addresses.Select(a => "http://" + a + ":" + staffPort + "/").ToList() },
                 { "publicBaseUrl", configuredPublic },
@@ -357,8 +368,7 @@ namespace Umc2.IntakeServer
             var body = call.ReadJson(4 * 1024);
             var mode = Json.Str(body, "mode") == "quick" ? "quick" : "off";
             host.Config.Update(c => c.TunnelMode = mode);
-            if (mode == "quick") host.Tunnel.StartQuick(host.Config.Read(c => c.PublicPort), host.Config.Read(c => c.CloudflaredPath));
-            else host.Tunnel.Stop();
+            host.ApplyTunnelMode();
             Logs.Audit(call.Session.Username, "tunnel-" + mode, "-", call.ClientIp);
             call.WriteJson(200, TunnelView(host.Tunnel.Snapshot()));
         }
@@ -407,7 +417,7 @@ namespace Umc2.IntakeServer
                 {
                     if (password.Length == 0) throw new ApiException(400, "password_required", "Cần đặt mật khẩu tạm cho tài khoản mới.");
                     user = NewUser(username, displayName, role, password);
-                    user.MustChangePassword = true;
+                    user.MustChangePassword = !Json.Bool(body, "skipPasswordChange");
                     c.Users.Add(user);
                     created = true;
                 }
@@ -486,6 +496,11 @@ namespace Umc2.IntakeServer
                 { "retentionDaysPending", c.RetentionDaysPending },
                 { "retentionDaysDone", c.RetentionDaysDone },
                 { "requireHisPatientIdOnApprove", c.RequireHisPatientIdOnApprove },
+                { "allowPublicStaffAccess", c.AllowPublicStaffAccess },
+                { "aiEnabled", c.AiEnabled },
+                { "aiModel", c.AiModel },
+                { "aiEndpoint", c.AiEndpoint },
+                { "aiKeySet", c.AiApiKeyProtected.Length > 0 },
                 { "maxPending", c.MaxPending },
                 { "publicSubmitLimitPerIp", c.PublicSubmitLimitPerIp },
                 { "staffPort", c.StaffPort },
@@ -510,11 +525,105 @@ namespace Umc2.IntakeServer
                 c.RetentionDaysPending = Json.Int(body, "retentionDaysPending", c.RetentionDaysPending);
                 c.RetentionDaysDone = Json.Int(body, "retentionDaysDone", c.RetentionDaysDone);
                 c.RequireHisPatientIdOnApprove = Json.Bool(body, "requireHisPatientIdOnApprove");
+                c.AllowPublicStaffAccess = Json.Bool(body, "allowPublicStaffAccess");
+                c.AiEnabled = Json.Bool(body, "aiEnabled");
+                var model = TextUtil.Clean(Json.Str(body, "aiModel"), 80, false);
+                c.AiModel = model.Length > 0 ? model : AiAssistant.DefaultModel;
+                var endpoint = TextUtil.Clean(Json.Str(body, "aiEndpoint"), 300, false);
+                if (endpoint.Length > 0 && !Regex.IsMatch(endpoint, @"^https?://[A-Za-z0-9.\-]+(:\d+)?(/[^\s]*)?$"))
+                    throw new ApiException(400, "invalid_url", "Địa chỉ dịch vụ AI không hợp lệ.");
+                c.AiEndpoint = endpoint;
+                var apiKey = Json.Str(body, "aiApiKey").Trim();
+                if (apiKey == "-") c.AiApiKeyProtected = string.Empty;                       // explicit clear
+                else if (apiKey.Length > 0) c.AiApiKeyProtected = Convert.ToBase64String(host.Protector.Protect(apiKey)); // new key
                 c.MaxPending = Json.Int(body, "maxPending", c.MaxPending);
                 c.PublicSubmitLimitPerIp = Json.Int(body, "publicSubmitLimitPerIp", c.PublicSubmitLimitPerIp);
             });
+            host.ApplyTunnelMode();
             Logs.Audit(call.Session.Username, "settings", "-", call.ClientIp);
             GetSettings(call);
+        }
+
+        // ---------- dashboard / export / demo ----------
+
+        private void Stats(HttpCall call)
+        {
+            call.WriteJson(200, Reports.Stats(host.Store, Days(call, 14)));
+        }
+
+        private void Export(HttpCall call)
+        {
+            var status = (call.Query["status"] ?? string.Empty).Trim().ToLowerInvariant();
+            if (status.Length > 0 && !IntakeStatus.All.Contains(status)) status = string.Empty;
+            var days = Days(call, 30);
+            var bytes = Reports.ExportXlsx(host.Store, days, status);
+            Logs.Audit(call.Session.Username, "export-xlsx", days + "d" + (status.Length > 0 ? "/" + status : string.Empty), call.ClientIp);
+            var name = "to-khai-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".xlsx";
+            call.WriteFile(200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name, bytes);
+        }
+
+        private void SeedDemo(HttpCall call)
+        {
+            var created = DemoData.Seed(host.Store, call.Session.Username);
+            host.NotifyChanged();
+            call.WriteJson(200, new Dictionary<string, object> { { "created", created } });
+        }
+
+        // ---------- controlled AI ----------
+
+        private void AiForIntake(HttpCall call, string id)
+        {
+            var record = host.Store.Get(id);
+            if (record == null) throw new ApiException(404, "not_found", "Không tìm thấy tờ khai.");
+            if (!host.Limiter.Allow("ai:" + call.Session.Username, 40, TimeSpan.FromMinutes(10)))
+                throw new ApiException(429, "rate_limited", "Bạn đã dùng trợ lý AI quá nhiều lần trong 10 phút. Vui lòng chờ.");
+            var body = call.ReadJson(8 * 1024);
+            var task = Json.Str(body, "task");
+            if (task == "draft")
+            {
+                var result = host.Ai.Draft(record);
+                Logs.Audit(call.Session.Username, "ai-draft", record.Code, call.ClientIp);
+                call.WriteJson(200, result);
+                return;
+            }
+            if (task == "ask")
+            {
+                var question = TextUtil.Clean(Json.Str(body, "question"), 500, false);
+                if (question.Length < 3) throw new ApiException(400, "question_required", "Hãy nhập câu hỏi về tờ khai này.");
+                var result = host.Ai.Ask(record, question);
+                Logs.Audit(call.Session.Username, Json.Bool(result, "inScope") ? "ai-ask" : "ai-ask-out-of-scope", record.Code, call.ClientIp);
+                call.WriteJson(200, result);
+                return;
+            }
+            throw new ApiException(400, "invalid_task", "Tác vụ AI không hợp lệ.");
+        }
+
+        /// <summary>The nurse's verdict on an AI draft (accepted N fields / rejected) — audit only, no content.</summary>
+        private void AiFeedback(HttpCall call, string id)
+        {
+            var record = host.Store.Get(id);
+            if (record == null) throw new ApiException(404, "not_found", "Không tìm thấy tờ khai.");
+            var body = call.ReadJson(4 * 1024);
+            var decision = Json.Str(body, "decision");
+            if (decision != "accept" && decision != "partial" && decision != "reject" && decision != "edited")
+                throw new ApiException(400, "invalid_decision", "Phản hồi không hợp lệ.");
+            var fields = Math.Max(0, Math.Min(50, Json.Int(body, "fields", 0)));
+            Logs.Audit(call.Session.Username, "ai-" + decision, record.Code + " (" + fields + " trường)", call.ClientIp);
+            call.WriteJson(200, new Dictionary<string, object> { { "ok", true } });
+        }
+
+        private void AiTest(HttpCall call)
+        {
+            var reply = host.Ai.Test();
+            Logs.Audit(call.Session.Username, "ai-test", "-", call.ClientIp);
+            call.WriteJson(200, new Dictionary<string, object> { { "ok", true }, { "reply", reply }, { "model", host.Config.Read(c => c.AiModel) } });
+        }
+
+        private static int Days(HttpCall call, int fallback)
+        {
+            int days;
+            if (!int.TryParse(call.Query["days"], out days)) days = fallback;
+            return Math.Max(1, Math.Min(365, days));
         }
 
         private void Audit(HttpCall call)

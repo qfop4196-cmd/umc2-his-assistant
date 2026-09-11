@@ -27,6 +27,10 @@ namespace Umc2.IntakeServer
             PublicSubmitLimitPerIp = 6;
             RequireHisPatientIdOnApprove = false;
             AllowPublicStaffAccess = false;
+            AiEnabled = false;
+            AiModel = AiAssistant.DefaultModel;
+            AiEndpoint = string.Empty;
+            AiApiKeyProtected = string.Empty;
             Users = new List<StaffUser>();
             Devices = new List<AgentDevice>();
             ConfigVersion = 1;
@@ -53,6 +57,11 @@ namespace Umc2.IntakeServer
         public bool RequireHisPatientIdOnApprove { get; set; }
         /// <summary>Must stay false in production: staff/agent API only answers LAN clients.</summary>
         public bool AllowPublicStaffAccess { get; set; }
+        /// <summary>Controlled AI helper on the nurse page (drafts + questions about one record). Key stored DPAPI-protected.</summary>
+        public bool AiEnabled { get; set; }
+        public string AiModel { get; set; }
+        public string AiEndpoint { get; set; }
+        public string AiApiKeyProtected { get; set; }
         public List<StaffUser> Users { get; set; }
         public List<AgentDevice> Devices { get; set; }
     }

@@ -15,6 +15,8 @@ namespace Umc2.IntakeServer
         public int StaffPort { get; set; }
         public int PublicPort { get; set; }
         public string BindHost { get; set; }
+        /// <summary>--demo: staff page reachable through a second quick tunnel (sample data only) and sample records seeded.</summary>
+        public bool Demo { get; set; }
     }
 
     /// <summary>Composition root: wires config, encrypted store, both HTTP ports, discovery, tunnel and maintenance.</summary>
@@ -36,7 +38,8 @@ namespace Umc2.IntakeServer
             Sessions = new SessionManager();
             Limiter = new RateLimiter();
             Pairing = new PairingCodes();
-            Tunnel = new TunnelManager();
+            Tunnel = new TunnelManager("cổng người bệnh");
+            StaffTunnel = new TunnelManager("cổng nhân viên (demo)");
             changeStamp = DateTime.UtcNow.Ticks / TimeSpan.TicksPerSecond;
         }
 
@@ -49,7 +52,11 @@ namespace Umc2.IntakeServer
         public RateLimiter Limiter { get; private set; }
         public PairingCodes Pairing { get; private set; }
         public StaticFiles Files { get; private set; }
+        public DataProtector Protector { get; private set; }
+        public AiAssistant Ai { get; private set; }
         public TunnelManager Tunnel { get; private set; }
+        /// <summary>Demo only: quick tunnel in front of the staff port so judges/reviewers can open the nurse page from the Internet.</summary>
+        public TunnelManager StaffTunnel { get; private set; }
 
         /// <summary>Increments whenever queue content changes; clients use it to skip needless refreshes.</summary>
         public long ChangeStamp { get { return Interlocked.Read(ref changeStamp); } }
@@ -78,20 +85,32 @@ namespace Umc2.IntakeServer
             var configDir = Path.Combine(DataDirectory, "config");
             Config = new ConfigStore(Path.Combine(configDir, "server.json"));
             Config.Load();
-            if (options.StaffPort > 0 || options.PublicPort > 0 || !string.IsNullOrWhiteSpace(options.BindHost))
+            if (options.StaffPort > 0 || options.PublicPort > 0 || !string.IsNullOrWhiteSpace(options.BindHost) || options.Demo)
             {
                 Config.Update(c =>
                 {
                     if (options.StaffPort > 0) c.StaffPort = options.StaffPort;
                     if (options.PublicPort > 0) c.PublicPort = options.PublicPort;
                     if (!string.IsNullOrWhiteSpace(options.BindHost)) c.BindHost = options.BindHost.Trim();
+                    if (options.Demo)
+                    {
+                        c.AllowPublicStaffAccess = true;
+                        c.TunnelMode = "quick";
+                    }
                 });
             }
 
             var protector = new DataProtector(Path.Combine(configDir, "data.key"));
+            Protector = protector;
+            Ai = new AiAssistant(this);
             Store = new IntakeStore(Path.Combine(DataDirectory, "intakes"), protector);
             var loaded = Store.Load();
             Logs.Info("Đã nạp " + loaded + " tờ khai (đã mã hóa).");
+            if (options.Demo && loaded == 0)
+            {
+                var seeded = DemoData.Seed(Store, "system");
+                Logs.Info("Chế độ demo: đã tạo " + seeded + " tờ khai mẫu (dữ liệu giả).");
+            }
             Maintenance(null);
 
             Files = new StaticFiles();
@@ -106,10 +125,19 @@ namespace Umc2.IntakeServer
                 discovery = new DiscoveryResponder(Config.Read(c => c.DiscoveryPort), Describe);
                 discovery.Start();
             }
-            if (Config.Read(c => c.TunnelMode) == "quick")
-                Tunnel.StartQuick(Config.Read(c => c.PublicPort), Config.Read(c => c.CloudflaredPath));
+            ApplyTunnelMode();
 
             maintenanceTimer = new Timer(Maintenance, null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(30));
+        }
+
+        /// <summary>Starts/stops cloudflared for the patient port and, in demo mode, for the staff port too.</summary>
+        public void ApplyTunnelMode()
+        {
+            var quick = Config.Read(c => c.TunnelMode) == "quick";
+            var cloudflared = Config.Read(c => c.CloudflaredPath);
+            if (quick) Tunnel.StartQuick(Config.Read(c => c.PublicPort), cloudflared); else Tunnel.Stop();
+            if (quick && Config.Read(c => c.AllowPublicStaffAccess)) StaffTunnel.StartQuick(Config.Read(c => c.StaffPort), cloudflared);
+            else StaffTunnel.Stop();
         }
 
         private Dictionary<string, object> Describe()
@@ -181,6 +209,7 @@ namespace Umc2.IntakeServer
         {
             if (maintenanceTimer != null) maintenanceTimer.Dispose();
             if (Tunnel != null) Tunnel.Dispose();
+            if (StaffTunnel != null) StaffTunnel.Dispose();
             if (discovery != null) discovery.Dispose();
             if (staffHost != null) staffHost.Dispose();
             if (publicHost != null) publicHost.Dispose();

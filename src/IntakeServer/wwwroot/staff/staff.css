@@ -145,3 +145,43 @@ table.st-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
   .st-detail { padding: 14px 14px 100px; }
   .st-user .name { display: none; }
 }
+
+/* ---- Thống kê (dashboard) ---- */
+.st-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.st-tile { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.st-tile-value { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+.st-tile-label { font-size: 0.82rem; color: var(--muted); margin-top: 4px; }
+.st-tile.pending .st-tile-value { color: var(--warn); }
+.st-tile.approved .st-tile-value { color: var(--primary); }
+.st-tile.completed .st-tile-value { color: var(--ok); }
+.st-bars { display: flex; align-items: flex-end; gap: 6px; height: 180px; padding: 8px 4px 0; }
+.st-bar-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+.st-bar-value { font-size: 0.72rem; color: var(--muted); height: 16px; }
+.st-bar { width: 70%; max-width: 34px; border-radius: 6px 6px 2px 2px; background: var(--primary); min-height: 2px; }
+.st-bar.primary { background: var(--primary); }
+.st-bar-label { font-size: 0.7rem; color: var(--muted); margin-top: 6px; white-space: nowrap; }
+.st-hbars > * + * { margin-top: 10px; }
+.st-hbar-label { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 0.86rem; }
+.st-hbar-track { height: 10px; background: var(--bg); border-radius: 6px; overflow: hidden; }
+.st-hbar-fill { height: 100%; border-radius: 6px; background: var(--primary); }
+.st-hbar-fill.pending { background: var(--warn); }
+.st-hbar-fill.claimed { background: var(--info); }
+.st-hbar-fill.completed { background: var(--ok); }
+.st-hbar-fill.rejected { background: var(--danger); }
+.st-toplist { list-style: none; margin: 0; padding: 0; }
+.st-toplist li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 0.9rem; }
+.st-toplist li:last-child { border-bottom: 0; }
+.st-dash-grid { margin-top: 14px; }
+@media (max-width: 900px) { .st-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .st-bar-label { font-size: 0.6rem; } }
+@media print { .st-top, .st-side, .st-tabs { display: none !important; } .st-layout { display: block; } .st-main { overflow: visible; } }
+
+/* ---- Trợ lý AI ---- */
+.st-ai-fields > * + * { margin-top: 10px; }
+.st-ai-fields textarea { background: #fbfdff; }
+.st-ai-qa { margin-top: 8px; }
+.st-ai-qa input { flex: 1 1 auto; }
+.st-ai-answer { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-top: 8px; background: #fff; font-size: 0.9rem; }
+.st-ai-answer.out { background: var(--bg); color: var(--muted); }
+.st-ai-q { font-weight: 600; margin-bottom: 4px; }
+.row.wrap { flex-wrap: wrap; }
+.spinner.small { width: 14px; height: 14px; border-width: 2px; vertical-align: middle; }

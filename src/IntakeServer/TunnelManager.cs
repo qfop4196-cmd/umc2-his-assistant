@@ -37,6 +37,12 @@ namespace Umc2.IntakeServer
         private bool stopping;
         private int restartCount;
         private Timer restartTimer;
+        private readonly string label;
+
+        public TunnelManager(string label)
+        {
+            this.label = label ?? "cổng";
+        }
 
         public TunnelStatus Snapshot()
         {
@@ -92,7 +98,7 @@ namespace Umc2.IntakeServer
             var info = new ProcessStartInfo
             {
                 FileName = exe,
-                Arguments = "tunnel --no-autoupdate --url http://127.0.0.1:" + publicPort.ToString(CultureInfo.InvariantCulture),
+                Arguments = "tunnel --no-autoupdate --http-host-header localhost --url http://127.0.0.1:" + publicPort.ToString(CultureInfo.InvariantCulture),
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,
@@ -112,7 +118,7 @@ namespace Umc2.IntakeServer
                 publicUrl = null;
                 startedAt = TextUtil.Now();
                 message = "Đang tạo đường hầm Cloudflare...";
-                Logs.Info("Tunnel: đã khởi động cloudflared (PID " + started.Id + ") cho cổng người bệnh " + publicPort);
+                Logs.Info("Tunnel: đã khởi động cloudflared (PID " + started.Id + ") cho " + label + " " + publicPort);
             }
             catch (Exception ex)
             {
@@ -133,7 +139,7 @@ namespace Umc2.IntakeServer
                     publicUrl = match.Value;
                     message = "Đang hoạt động (địa chỉ tạm, đổi mỗi lần khởi động lại)";
                     restartCount = 0;
-                    Logs.Info("Tunnel: địa chỉ công khai " + publicUrl);
+                    Logs.Info("Tunnel: địa chỉ " + label + " " + publicUrl);
                 }
                 else if (e.Data.IndexOf(" ERR ", StringComparison.Ordinal) >= 0 && publicUrl == null)
                 {

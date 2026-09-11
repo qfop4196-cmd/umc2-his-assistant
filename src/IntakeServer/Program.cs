@@ -84,11 +84,46 @@ namespace Umc2.IntakeServer
                 }
                 if (!host.Config.HasUsers)
                     Console.WriteLine(" Lần đầu: mở http://localhost:" + staffPort + "/ trên máy này để tạo tài khoản quản trị.");
+                if (options.Demo)
+                {
+                    Console.WriteLine(" CHẾ ĐỘ DEMO: dữ liệu mẫu giả; trang nhân viên cũng được mở qua Internet. Không dùng với dữ liệu thật.");
+                    Console.WriteLine(" Địa chỉ Internet (Cloudflare) sẽ hiện ở đây sau vài giây, hoặc xem Quản trị → Mã QR & kết nối.");
+                }
                 Console.WriteLine(" Nhấn Ctrl+C để dừng.");
                 Console.WriteLine("===============================================================");
+                if (options.Demo) PrintTunnelUrls(host, stop);
                 stop.WaitOne();
             }
             return 0;
+        }
+
+        /// <summary>Demo console: prints the two temporary Cloudflare URLs once cloudflared reports them (up to 60 s).</summary>
+        private static void PrintTunnelUrls(ServerHost host, ManualResetEvent stop)
+        {
+            string patientUrl = null, staffUrl = null;
+            for (var i = 0; i < 60 && !stop.WaitOne(1000); i++)
+            {
+                var t = host.Tunnel.Snapshot();
+                var s = host.StaffTunnel.Snapshot();
+                if (patientUrl == null && !string.IsNullOrEmpty(t.PublicUrl))
+                {
+                    patientUrl = t.PublicUrl;
+                    Console.WriteLine("  Tờ khai người bệnh (Internet): " + patientUrl + "/");
+                }
+                if (staffUrl == null && !string.IsNullOrEmpty(s.PublicUrl))
+                {
+                    staffUrl = s.PublicUrl;
+                    Console.WriteLine("  Trang điều dưỡng (Internet, demo): " + staffUrl + "/");
+                }
+                if (patientUrl != null && staffUrl != null) return;
+                if (!t.CloudflaredFound)
+                {
+                    Console.WriteLine("  Chưa có cloudflared.exe — " + t.Message);
+                    return;
+                }
+            }
+            if (patientUrl == null || staffUrl == null)
+                Console.WriteLine("  Chưa nhận được địa chỉ Cloudflare: " + host.Tunnel.Snapshot().Message);
         }
 
         private static int ResetPassword(ServerOptions options, string username)
@@ -155,6 +190,9 @@ namespace Umc2.IntakeServer
                     case "--bind":
                         options.BindHost = Next(args, ref i);
                         break;
+                    case "--demo":
+                        options.Demo = true;
+                        break;
                 }
             }
             return options;
@@ -183,6 +221,7 @@ namespace Umc2.IntakeServer
             Console.WriteLine("  IntakeServer.exe --reset-password <tên>   Cấp mật khẩu tạm cho tài khoản nhân viên");
             Console.WriteLine();
             Console.WriteLine("  Tùy chọn: --data <thư mục>  --staff-port 8080  --public-port 8081  --bind + | localhost");
+            Console.WriteLine("            --demo   Chế độ trình diễn: dữ liệu mẫu giả + đường hầm Cloudflare cho cả trang nhân viên (KHÔNG dùng với dữ liệu thật)");
         }
     }
 

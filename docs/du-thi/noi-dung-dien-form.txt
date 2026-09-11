@@ -1,0 +1,35 @@
+﻿NỘI DUNG ĐIỀN PHIẾU ĐĂNG KÝ (Microsoft Forms) — sao chép từng mục
+Các mục 1–6 (họ tên, học hàm/học vị, chức vụ, đơn vị, điện thoại, email): bạn tự điền.
+Tải 2 tệp đính kèm lên Google Drive/OneDrive, đặt "Anyone with the link can view", rồi thay <LINK-PDF> và <LINK-XLSX> bên dưới.
+Thay <URL-TO-KHAI> và <URL-DIEU-DUONG> bằng 2 địa chỉ https://…trycloudflare.com hiện trong cửa sổ CHAY-DEMO.cmd.
+
+7. Tên sản phẩm dự thi
+UMC2 Intake — Tờ khai điện tử trước khám và tự động điền hồ sơ vào HIS (web app + trợ lý AI có kiểm soát)
+
+8. Quy trình hành chính được số hóa (hiện trạng và điểm nghẽn)
+Quy trình tiếp nhận thông tin hành chính, lý do khám, tiền sử, dị ứng và sinh hiệu của người bệnh trước khi bác sĩ lập Phiếu khám vào viện trên UMC2HIS. Hiện nay người bệnh khai trên giấy hoặc trả lời miệng, điều dưỡng ghi tay, rồi bác sĩ gõ lại toàn bộ vào 15–20 ô trên HIS: chữ viết khó đọc, hỏi lặp, sai sót chuyển chép, dễ nhầm hồ sơ, mỗi hồ sơ mất 6–10 phút gõ phần hành chính/bệnh sử (ước tính), tốn giấy và không thống kê được. Sản phẩm số hóa toàn bộ: người bệnh khai một lần bằng điện thoại (QR/kiosk/Internet) → điều dưỡng duyệt trên web, gắn mã BN, nhập sinh hiệu → máy bác sĩ tự nhận diện hồ sơ đang mở trên HIS và điền tự động, bác sĩ kiểm tra rồi tự bấm Lưu. Chi tiết: mục 1 hồ sơ PDF <LINK-PDF>
+
+9. Biểu mẫu điện tử đã xây dựng và số hóa
+Tờ khai người bệnh 5 bước (chạy thử: <URL-TO-KHAI>) có kiểm tra hợp lệ ở trình duyệt và máy chủ (họ tên, ngày sinh, SĐT 9–11 số, CCCD 9/12 số, bắt buộc lý do khám và đồng ý xử lý dữ liệu, chống spam, cảnh báo cấp cứu); biểu mẫu điều dưỡng (mã BN, 7 sinh hiệu có khoảng hợp lệ, 6 ô nội dung chuyển HIS). Mô tả: mục 2 hồ sơ PDF <LINK-PDF>
+
+10. Dữ liệu giả lập để demo
+Tệp Excel 14 hồ sơ giả (tên "Mẫu/Thử/Demo", SĐT 0900000xxx, mã BN-TEST-0xx) ở đủ trạng thái: <LINK-XLSX>. Máy chủ demo tự tạo bộ dữ liệu này (Cài đặt → Tạo 14 tờ khai mẫu), có thể xuất lại bằng nút Xuất Excel.
+
+11. Các trạng thái xử lý của hồ sơ
+Chờ duyệt (người bệnh gửi) → Chờ bác sĩ (điều dưỡng duyệt, gắn mã BN) → Bác sĩ đang điền (máy bác sĩ nhận, giữ tối đa 4 giờ) → Đã nhập HIS (bác sĩ xác nhận đã lưu); Từ chối/Yêu cầu bổ sung (bắt buộc ghi lý do) và Mở lại. Mọi chuyển trạng thái ghi lịch sử hồ sơ và nhật ký thao tác. Sơ đồ trạng thái: mục 4 hồ sơ PDF <LINK-PDF>
+
+12. Mô tả luồng tự động hóa
+(1) Gửi tờ khai → hàng chờ điều dưỡng (âm báo, bộ đếm thời gian thực); (2) Duyệt → tự chuyển sang hàng chờ máy bác sĩ, ghép theo mã BN hoặc họ tên + năm sinh; (3) Trợ lý trên máy bác sĩ tự nhận diện người bệnh đang mở trên HIS (chỉ đọc mã BN, họ tên, năm sinh) và đề xuất đúng tờ khai; (4) Điền tự động 15–20 ô vào HIS bằng UI Automation, kiểm tra mọi ô trước khi ghi, đọc lại sau khi ghi, không bao giờ tự bấm Lưu; (5) Bác sĩ bấm "Đã lưu" → trạng thái Đã nhập HIS, thống kê, xuất Excel; (6) Từ chối kèm lý do → người bệnh tra cứu bằng mã; tự trả tờ khai giữ quá 4 giờ, tự xóa tờ khai quá hạn. Sơ đồ swimlane: mục 5 hồ sơ PDF <LINK-PDF>
+
+13. Chức năng AI đã tích hợp
+Trợ lý AI có kiểm soát trên trang điều dưỡng (Claude API): (a) dự thảo lý do khám, bệnh sử, tiền sử, dị ứng, triệu chứng, chẩn đoán sơ bộ gợi ý + ICD-10 gợi ý, dấu hiệu nguy hiểm, mục còn thiếu, độ tin cậy; (b) hỏi đáp trong phạm vi tờ khai, từ chối câu hỏi ngoài phạm vi (gắn nhãn [Ngoài phạm vi]). Kiểm soát: AI chỉ nhận dữ liệu đã bỏ định danh (không tên/SĐT/CCCD/mã BN); kết quả theo hợp đồng JSON được máy chủ kiểm tra; điều dưỡng duyệt từng mục / dùng tất cả (vẫn sửa) / bỏ toàn bộ; chẩn đoán chỉ tham khảo; mọi lượt dùng và quyết định ghi nhật ký; giới hạn 40 lượt/10 phút; khóa API mã hóa DPAPI; luôn có bản soạn theo quy tắc khi không dùng AI. Chi tiết: mục 6 hồ sơ PDF <LINK-PDF>
+
+14. Đường dẫn sản phẩm và tài khoản demo cấp cho Ban Giám khảo
+- Tờ khai người bệnh (mở trên điện thoại, khai tên giả): <URL-TO-KHAI>
+- Trang điều dưỡng (duyệt, thống kê, xuất Excel, trợ lý AI): <URL-DIEU-DUONG> — tài khoản: giamkhao / mật khẩu: Demo2026ok
+- Máy chủ demo chạy trên máy của thí sinh qua Cloudflare Tunnel với dữ liệu giả; nếu địa chỉ thay đổi, thí sinh sẽ gửi lại Ban tổ chức qua email. Phần trợ lý máy bác sĩ + HIS giả sẽ trình diễn trực tiếp tại buổi chấm.
+
+15. Lợi ích ước tính (thời gian, giấy tờ, sai sót giảm được)
+Ước tính (sẽ đo trong pilot bằng trang Thống kê): bác sĩ giảm 6–10 phút gõ mỗi hồ sơ xuống 1–2 phút (15–20 ô điền tự động) → với 60 hồ sơ/ngày tiết kiệm ≈ 6 giờ bác sĩ/ngày; điều dưỡng giảm 2–3 phút/hồ sơ do không hỏi lại; bỏ phiếu giấy ≈ 1.500 tờ/tháng/phòng khám; loại sai sót chuyển chép và nhầm hồ sơ nhờ đối chiếu mã BN trước khi ghi và đọc lại sau khi ghi; người bệnh khai trước từ nhà nên bớt chờ tại quầy; có dashboard, xuất Excel, nhật ký để quản lý. Chi tiết: mục 9 hồ sơ PDF <LINK-PDF>
+
+16. Cam kết: chọn "Tôi cam kết".

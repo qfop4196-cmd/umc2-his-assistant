@@ -84,6 +84,28 @@ namespace Umc2.IntakeServer
             }
         }
 
+        /// <summary>Stores a fully formed record (demo/sample data, migrations): keeps its status, timestamps and history.</summary>
+        public IntakeRecord Import(IntakeRecord record)
+        {
+            lock (sync)
+            {
+                if (string.IsNullOrEmpty(record.Id)) record.Id = Tokens.NewId();
+                if (string.IsNullOrEmpty(record.Code) || records.Values.Any(r => r.Code == record.Code))
+                {
+                    string code;
+                    do { code = Tokens.NewShortCode(); } while (records.Values.Any(r => r.Code == code));
+                    record.Code = code;
+                }
+                if (string.IsNullOrEmpty(record.Status)) record.Status = IntakeStatus.Pending;
+                if (string.IsNullOrEmpty(record.CreatedAt)) record.CreatedAt = TextUtil.Now();
+                if (string.IsNullOrEmpty(record.UpdatedAt)) record.UpdatedAt = record.CreatedAt;
+                Normalize(record);
+                Save(record);
+                records[record.Id] = record;
+                return Clone(record);
+            }
+        }
+
         public IntakeRecord Get(string id)
         {
             lock (sync)

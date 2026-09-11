@@ -175,7 +175,45 @@ namespace ServerFlowTest
                 var logs = string.Join("\n", Directory.GetFiles(Path.Combine(dataDir, "logs")).Select(f => File.ReadAllText(f)).ToArray());
                 Expect(!logs.Contains("Bệnh Nhân Thử") && !logs.Contains("0900000001"), "logs contain no patient identifiers");
 
-                Console.WriteLine("PASS: " + checks + " checks (submit, consent, port isolation, CSRF, setup, approve, pairing, discovery, match, mismatch guard, claim/complete, revoke, encryption, clean logs).");
+                // Sample data, dashboard figures and Excel export.
+                var seeded = Call("POST", staffUrl + "/api/staff/demo-data", new Dictionary<string, object>(), true);
+                Expect(seeded.Status == 200 && Convert.ToInt32(seeded.Body["created"]) >= 10, "demo data seeds at least 10 records");
+                var stats = Call("GET", staffUrl + "/api/staff/stats?days=14", null, false);
+                Expect(stats.Status == 200 && Convert.ToInt32(stats.Body["total"]) >= 11, "stats count every record");
+                var perDay = ToList(stats.Body["perDay"]) as System.Collections.ArrayList;
+                Expect(perDay != null && perDay.Count == 14, "stats give one bucket per day");
+                var export = Download(staffUrl + "/api/staff/export.xlsx?days=30");
+                Expect(export.Length > 2000 && export[0] == 'P' && export[1] == 'K', "Excel export is a zip package");
+                Expect(Encoding.UTF8.GetString(export).Contains("xl/worksheets/sheet1.xml"), "Excel export contains the worksheet part");
+
+                // Controlled AI against a local mock of the Anthropic Messages API.
+                var aiPort = FreePort();
+                using (var mock = new MockAi(aiPort))
+                {
+                    var settings = Call("GET", staffUrl + "/api/staff/settings", null, false).Body;
+                    settings["aiEnabled"] = true;
+                    settings["aiApiKey"] = "sk-test-key";
+                    settings["aiEndpoint"] = "http://localhost:" + aiPort + "/v1/messages";
+                    settings["aiModel"] = "mock-model";
+                    var savedAi = Call("POST", staffUrl + "/api/staff/settings", settings, true);
+                    Expect(savedAi.Status == 200 && (bool)savedAi.Body["aiKeySet"] && !Json.Serialize(savedAi.Body).Contains("sk-test-key"), "AI key stored but never echoed");
+                    var config = File.ReadAllText(Path.Combine(Path.Combine(dataDir, "config"), "server.json"));
+                    Expect(!config.Contains("sk-test-key"), "AI key is not stored in plain text");
+                    Expect(Str(Call("POST", staffUrl + "/api/staff/ai/test", new Dictionary<string, object>(), true).Body, "reply").Length > 0, "AI connection test");
+                    var listing = (System.Collections.ArrayList)ToList(Call("GET", staffUrl + "/api/staff/intakes?status=pending", null, false).Body["items"]);
+                    var sample = (Dictionary<string, object>)listing[0];
+                    var draft = Call("POST", staffUrl + "/api/staff/intakes/" + Str(sample, "id") + "/ai", new Dictionary<string, object> { { "task", "draft" } }, true);
+                    Expect(draft.Status == 200 && ((Dictionary<string, object>)draft.Body["fields"]).ContainsKey("History"), "AI draft returns validated fields");
+                    Expect(mock.LastPrompt.Length > 0 && !mock.LastPrompt.Contains(Str(sample, "fullName")) && !mock.LastPrompt.Contains("0900"), "AI receives de-identified data only");
+                    var ask = Call("POST", staffUrl + "/api/staff/intakes/" + Str(sample, "id") + "/ai", new Dictionary<string, object> { { "task", "ask" }, { "question", "Thời tiết hôm nay thế nào?" } }, true);
+                    Expect(ask.Status == 200 && !(bool)ask.Body["inScope"], "out-of-scope question is flagged");
+                    var feedback = Call("POST", staffUrl + "/api/staff/intakes/" + Str(sample, "id") + "/ai-feedback", new Dictionary<string, object> { { "decision", "reject" }, { "fields", 3 } }, true);
+                    Expect(feedback.Status == 200, "AI feedback recorded");
+                    var auditText = string.Join("\n", Directory.GetFiles(Path.Combine(dataDir, "logs"), "audit-*.log").Select(f => File.ReadAllText(f)).ToArray());
+                    Expect(auditText.Contains("ai-draft") && auditText.Contains("ai-reject") && auditText.Contains("export-xlsx") && auditText.Contains("demo-seed"), "AI use, export and seeding are audited");
+                }
+
+                Console.WriteLine("PASS: " + checks + " checks (submit, consent, port isolation, CSRF, setup, approve, pairing, discovery, match, mismatch guard, claim/complete, revoke, encryption, clean logs, demo data, stats, Excel export, controlled AI).");
                 return 0;
             }
             catch (Exception ex)
@@ -201,6 +239,81 @@ namespace ServerFlowTest
             catch (Exception)
             {
                 // Already exited.
+            }
+        }
+
+        private static byte[] Download(string url)
+        {
+            var request = (HttpWebRequest)WebRequest.Create(url);
+            request.CookieContainer = Cookies;
+            request.Proxy = null;
+            request.Timeout = 10000;
+            using (var response = (HttpWebResponse)request.GetResponse())
+            using (var stream = response.GetResponseStream())
+            using (var buffer = new MemoryStream())
+            {
+                var chunk = new byte[8192];
+                int read;
+                while ((read = stream.Read(chunk, 0, chunk.Length)) > 0) buffer.Write(chunk, 0, read);
+                return buffer.ToArray();
+            }
+        }
+
+        /// <summary>Local stand-in for the Anthropic Messages API: answers in the JSON contract the server expects.</summary>
+        private sealed class MockAi : IDisposable
+        {
+            private readonly HttpListener listener = new HttpListener();
+            public string LastPrompt = string.Empty;
+
+            public MockAi(int port)
+            {
+                listener.Prefixes.Add("http://localhost:" + port + "/");
+                listener.Start();
+                listener.BeginGetContext(OnRequest, null);
+            }
+
+            private void OnRequest(IAsyncResult ar)
+            {
+                HttpListenerContext context;
+                try { context = listener.EndGetContext(ar); }
+                catch (Exception) { return; }
+                try
+                {
+                    listener.BeginGetContext(OnRequest, null);
+                    string body;
+                    using (var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8)) body = reader.ReadToEnd();
+                    var request = Json.DeserializeObject(body) as Dictionary<string, object>;
+                    var messages = (System.Collections.ArrayList)ToList(request["messages"]);
+                    var user = Str((Dictionary<string, object>)messages[0], "content");
+                    LastPrompt = user;
+                    string text;
+                    if (context.Request.Headers["x-api-key"] != "sk-test-key") text = "{}";
+                    else if (user.Contains("CÂU HỎI CỦA ĐIỀU DƯỠNG"))
+                        text = user.Contains("Thời tiết")
+                            ? "{\"answer\":\"Câu hỏi này nằm ngoài phạm vi tờ khai; vui lòng hỏi bác sĩ.\",\"inScope\":false}"
+                            : "{\"answer\":\"Người bệnh khai dị ứng Penicillin.\",\"inScope\":true}";
+                    else if (user.Contains("sẵn sàng")) text = "sẵn sàng";
+                    else text = "```json\n{\"ReasonForAdmission\":\"Đau bụng 2 ngày\",\"History\":\"Bệnh 2 ngày nay, đau hạ sườn phải.\",\"PastHistory\":\"chưa khai\",\"FamilyHistory\":\"Chưa ghi nhận.\",\"Allergy\":\"Dị ứng Penicillin.\",\"Symptoms\":\"Đau hạ sườn phải\",\"PreliminaryDiagnosis\":\"Theo dõi viêm túi mật\",\"IcdSuggestions\":[\"K81.0 - Viêm túi mật cấp\"],\"RedFlags\":[\"Sốt kèm đau bụng\"],\"MissingInfo\":[],\"Confidence\":\"trung bình\"}\n```";
+                    var reply = Encoding.UTF8.GetBytes(Json.Serialize(new Dictionary<string, object>
+                    {
+                        { "id", "msg_test" }, { "type", "message" }, { "role", "assistant" }, { "model", "mock-model" },
+                        { "content", new[] { new Dictionary<string, object> { { "type", "text" }, { "text", text } } } }
+                    }));
+                    context.Response.StatusCode = 200;
+                    context.Response.ContentType = "application/json";
+                    context.Response.ContentLength64 = reply.Length;
+                    context.Response.OutputStream.Write(reply, 0, reply.Length);
+                    context.Response.Close();
+                }
+                catch (Exception)
+                {
+                    try { context.Response.Abort(); } catch (Exception) { }
+                }
+            }
+
+            public void Dispose()
+            {
+                try { listener.Stop(); listener.Close(); } catch (Exception) { }
             }
         }
 

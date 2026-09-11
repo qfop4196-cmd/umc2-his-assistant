@@ -223,6 +223,15 @@ namespace Umc2.IntakeServer
             WriteBytes(status, "application/json; charset=utf-8", bytes, false, true);
         }
 
+        /// <summary>Download response (attachment) — never cached, never compressed (Office files are already deflated).</summary>
+        public void WriteFile(int status, string contentType, string fileName, byte[] bytes)
+        {
+            if (responded) return;
+            var safeName = new string(fileName.Where(ch => char.IsLetterOrDigit(ch) || ch == '-' || ch == '_' || ch == '.').ToArray());
+            context.Response.Headers["Content-Disposition"] = "attachment; filename=\"" + safeName + "\"";
+            WriteBytes(status, contentType, bytes, false, false);
+        }
+
         public void WriteError(int status, string code, string message)
         {
             if (responded) return;

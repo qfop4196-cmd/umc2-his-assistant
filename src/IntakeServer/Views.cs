@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace Umc2.IntakeServer
@@ -144,10 +145,20 @@ namespace Umc2.IntakeServer
             };
         }
 
-        private static string AnswerText(IntakeRecord r, string key)
+        internal static string AnswerText(IntakeRecord r, string key)
         {
             object value;
-            return r.Answers != null && r.Answers.TryGetValue(key, out value) && value != null ? Convert.ToString(value) : string.Empty;
+            if (r.Answers == null || !r.Answers.TryGetValue(key, out value) || value == null) return string.Empty;
+            var text = value as string;
+            if (text != null) return text;
+            var list = value as System.Collections.IEnumerable;
+            if (list != null)
+            {
+                var parts = new List<string>();
+                foreach (var item in list) if (item != null) parts.Add(Convert.ToString(item, CultureInfo.InvariantCulture));
+                return string.Join(", ", parts.ToArray());
+            }
+            return Convert.ToString(value, CultureInfo.InvariantCulture);
         }
     }
 }

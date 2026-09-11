@@ -23,6 +23,7 @@
   var lastPending = null;
   var soundOn = readPref('umc2-sound', '1') === '1';
   var els = {};
+  var aiState = { id: null, draft: null, answers: [], busy: false, question: '' }; // AI suggestions for the record on screen (RAM only)
 
   var TABS = [
     { id: 'pending', label: 'Chờ duyệt', countKeys: ['pending'] },
@@ -321,6 +322,8 @@
       h('div', { class: 'spacer' }),
       els.live,
       soundBtn,
+      h('button', { type: 'button', class: 'btn small', text: 'Thống kê', onclick: function () { renderDashboard(); } }),
+      h('button', { type: 'button', class: 'btn small', text: 'Xuất Excel', title: 'Tải danh sách tờ khai 30 ngày (.xlsx)', onclick: function () { exportExcel(30, ''); } }),
       h('button', { type: 'button', class: 'btn small', text: 'Mã QR & kết nối', onclick: function () { openAdmin('access'); } }),
       user.role === 'admin' ? h('button', { type: 'button', class: 'btn small', text: 'Quản trị', onclick: function () { openAdmin('devices'); } }) : null,
       h('div', { class: 'st-user' },
@@ -501,6 +504,7 @@
     sections.appendChild(identityCard(r, canEdit));
     sections.appendChild(vitalsCard(canEdit));
     sections.appendChild(textCard(canEdit));
+    sections.appendChild(aiCard(r, canEdit));
     sections.appendChild(rawAnswersCard(r));
     sections.appendChild(noteCard(canEdit));
     sections.appendChild(historyCard(r));
@@ -609,6 +613,121 @@
       h('div', { class: 'card-title' }, h('h3', { text: 'Nội dung chuyển vào HIS (phần bác sĩ)' }), recompose),
       h('p', { class: 'hint', text: 'Bản nháp soạn tự động từ câu trả lời của người bệnh. Điều dưỡng sửa cho đúng trước khi duyệt; bác sĩ vẫn kiểm tra lại trên HIS trước khi lưu.' }),
       list);
+  }
+
+  // ------------------------------------------------------------------ controlled AI
+  function aiFeedback(decision, fields) {
+    if (!detail) return;
+    api('POST', '/api/staff/intakes/' + detail.id + '/ai-feedback', { decision: decision, fields: fields || 0 }).catch(function () { /* audit only */ });
+  }
+
+  function aiCard(r, canEdit) {
+    if (aiState.id !== r.id) aiState = { id: r.id, draft: null, answers: [], busy: false, question: '' };
+    var body = h('div', { class: 'stack' });
+    var card = h('section', { class: 'card st-ai' },
+      h('div', { class: 'card-title' }, h('h3', { text: 'Trợ lý AI có kiểm soát' }), h('span', { class: 'badge', text: boot.aiEnabled ? 'Đã bật' : 'Chưa cấu hình' })),
+      h('p', { class: 'hint', text: 'AI chỉ nhận câu trả lời lâm sàng của tờ khai này (không có họ tên, số điện thoại, mã BN). Mọi gợi ý đều phải được điều dưỡng chấp nhận từng mục, sửa hoặc bỏ; mỗi quyết định được ghi vào nhật ký.' }),
+      body);
+    if (!boot.aiEnabled) {
+      body.appendChild(h('div', { class: 'alert info' }, h('div', null, user.role === 'admin'
+        ? 'Chưa cấu hình khóa API. Vào Quản trị → Cài đặt → Trợ lý AI để bật.'
+        : 'Quản trị viên chưa bật trợ lý AI. Vẫn dùng được bản soạn theo quy tắc ở khung trên.')));
+      return card;
+    }
+    var draftBtn = h('button', { type: 'button', class: 'btn primary small', text: aiState.draft ? 'Soạn lại bằng AI' : 'Dự thảo nội dung bằng AI', disabled: aiState.busy ? true : null });
+    draftBtn.addEventListener('click', function () {
+      aiState.busy = true;
+      renderDetail();
+      api('POST', '/api/staff/intakes/' + r.id + '/ai', { task: 'draft' }).then(function (res) {
+        aiState.busy = false;
+        aiState.draft = res;
+        aiState.accepted = {};
+        renderDetail();
+      }).catch(function (err) { aiState.busy = false; renderDetail(); handleError(err); });
+    });
+    var actions = h('div', { class: 'row tight' }, draftBtn);
+    if (aiState.busy) actions.appendChild(h('span', { class: 'hint' }, h('span', { class: 'spinner small' }), ' Đang gọi mô hình…'));
+    body.appendChild(actions);
+
+    var d = aiState.draft;
+    if (d) {
+      if ((d.redFlags || []).length) {
+        var flagsUl = h('ul', null);
+        d.redFlags.forEach(function (f) { flagsUl.appendChild(h('li', { text: f })); });
+        body.appendChild(h('div', { class: 'alert warn' }, h('div', null, h('strong', { text: 'Dấu hiệu cần lưu ý (AI gợi ý, cần điều dưỡng/bác sĩ xác nhận): ' }), flagsUl)));
+      }
+      var list = h('div', { class: 'st-ai-fields' });
+      var keys = C.TEXT_FIELDS.map(function (f) { return f.key; }).concat(['PreliminaryDiagnosis']);
+      var labels = {};
+      C.TEXT_FIELDS.forEach(function (f) { labels[f.key] = f.label; });
+      labels.PreliminaryDiagnosis = 'Chẩn đoán sơ bộ gợi ý (bác sĩ quyết định)';
+      var usable = 0;
+      keys.forEach(function (key) {
+        var text = d.fields && d.fields[key];
+        if (!text) return;
+        usable++;
+        var accepted = aiState.accepted && aiState.accepted[key];
+        var ta = h('textarea', { rows: Math.min(6, Math.max(2, Math.ceil(text.length / 90))), readonly: true });
+        ta.value = text;
+        var useBtn = canEdit && key !== 'PreliminaryDiagnosis'
+          ? h('button', { type: 'button', class: 'btn small ' + (accepted ? 'ghost' : ''), text: accepted ? 'Đã dùng' : 'Dùng mục này', disabled: accepted ? true : null })
+          : null;
+        if (useBtn) useBtn.addEventListener('click', function () {
+          draft.fields[key] = text;
+          aiState.accepted[key] = true;
+          markDirty();
+          aiFeedback('partial', 1);
+          renderDetail();
+        });
+        list.appendChild(h('div', { class: 'field' }, h('div', { class: 'st-field-head' }, h('label', { text: labels[key] || key }), useBtn), ta));
+      });
+      body.appendChild(list);
+      var meta = h('div', { class: 'row tight wrap' });
+      if ((d.icd || []).length) meta.appendChild(h('span', { class: 'hint', text: 'ICD-10 gợi ý: ' + d.icd.join(' · ') }));
+      if (d.confidence) meta.appendChild(h('span', { class: 'badge', text: 'Độ tin cậy: ' + d.confidence }));
+      if ((d.missing || []).length) meta.appendChild(h('span', { class: 'hint', text: 'Còn thiếu: ' + d.missing.join('; ') }));
+      body.appendChild(meta);
+      if (canEdit) {
+        var useAll = h('button', { type: 'button', class: 'btn small', text: 'Dùng tất cả (vẫn sửa được)' });
+        useAll.addEventListener('click', function () {
+          var n = 0;
+          C.TEXT_FIELDS.forEach(function (f) { if (d.fields[f.key]) { draft.fields[f.key] = d.fields[f.key]; aiState.accepted[f.key] = true; n++; } });
+          markDirty();
+          aiFeedback('accept', n);
+          renderDetail();
+          toast('Đã đưa ' + n + ' mục vào bản nháp — hãy đọc và sửa trước khi duyệt.');
+        });
+        var reject = h('button', { type: 'button', class: 'btn ghost small', text: 'Không phù hợp, bỏ toàn bộ' });
+        reject.addEventListener('click', function () { aiFeedback('reject', usable); aiState.draft = null; renderDetail(); toast('Đã bỏ bản nháp AI (đã ghi nhận vào nhật ký).'); });
+        body.appendChild(h('div', { class: 'row tight' }, useAll, reject));
+      }
+      body.appendChild(h('p', { class: 'hint', text: d.disclaimer + ' Mô hình: ' + d.model }));
+    }
+
+    // Q&A about this record only
+    var q = h('input', { type: 'text', placeholder: 'Hỏi về tờ khai này, ví dụ: "Có dị ứng thuốc nào cần lưu ý?"', value: aiState.question, 'aria-label': 'Câu hỏi cho AI' });
+    var askBtn = h('button', { type: 'button', class: 'btn small', text: 'Hỏi' });
+    var ask = function () {
+      var question = q.value.trim();
+      if (question.length < 3) { q.focus(); return; }
+      askBtn.disabled = true;
+      api('POST', '/api/staff/intakes/' + r.id + '/ai', { task: 'ask', question: question }).then(function (res) {
+        aiState.answers.unshift({ q: question, a: res.answer, inScope: res.inScope });
+        aiState.question = '';
+        renderDetail();
+      }).catch(function (err) { askBtn.disabled = false; handleError(err); });
+    };
+    askBtn.addEventListener('click', ask);
+    q.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); ask(); } });
+    q.addEventListener('input', function () { aiState.question = q.value; });
+    var qa = h('div', { class: 'st-ai-qa' }, h('div', { class: 'row tight' }, q, askBtn));
+    aiState.answers.slice(0, 4).forEach(function (item) {
+      qa.appendChild(h('div', { class: 'st-ai-answer' + (item.inScope ? '' : ' out') },
+        h('div', { class: 'st-ai-q', text: 'Hỏi: ' + item.q }),
+        h('div', { class: 'st-ai-a', text: (item.inScope ? '' : '[Ngoài phạm vi] ') + item.a })));
+    });
+    body.appendChild(qa);
+    return card;
   }
 
   function rawAnswersCard(r) {
@@ -736,6 +855,105 @@
   }
 
   // ------------------------------------------------------------------ admin / access
+  // ------------------------------------------------------------------ dashboard / export
+  function exportExcel(days, status) {
+    // Cookie-authenticated GET download; the server writes an audit entry (who/when/range, no content).
+    var a = document.createElement('a');
+    a.href = '/api/staff/export.xlsx?days=' + encodeURIComponent(days) + (status ? '&status=' + encodeURIComponent(status) : '');
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast('Đang tải file Excel…');
+  }
+
+  function tile(value, label, cls) {
+    return h('div', { class: 'st-tile' + (cls ? ' ' + cls : '') }, h('div', { class: 'st-tile-value', text: String(value) }), h('div', { class: 'st-tile-label', text: label }));
+  }
+
+  function minutesText(m) {
+    if (!m) return '—';
+    if (m < 60) return Math.round(m) + ' phút';
+    if (m < 60 * 24) return (m / 60).toFixed(1) + ' giờ';
+    return (m / 60 / 24).toFixed(1) + ' ngày';
+  }
+
+  function barChart(rows, key, color) {
+    var max = rows.reduce(function (m, r) { return Math.max(m, r[key] || 0); }, 0) || 1;
+    var chart = h('div', { class: 'st-bars', role: 'img', 'aria-label': 'Số tờ khai theo ngày' });
+    rows.forEach(function (r) {
+      var v = r[key] || 0;
+      var bar = h('div', { class: 'st-bar ' + color, title: r.label + ': ' + v });
+      bar.style.height = Math.max(2, Math.round(v / max * 100)) + '%';
+      chart.appendChild(h('div', { class: 'st-bar-col' }, h('div', { class: 'st-bar-value', text: v ? String(v) : '' }), bar, h('div', { class: 'st-bar-label', text: r.label })));
+    });
+    return chart;
+  }
+
+  function renderDashboard() {
+    selectedId = null;
+    clear(els.main);
+    els.main.appendChild(h('div', { class: 'st-placeholder' }, h('span', { class: 'spinner' })));
+    var days = Number(readPref('umc2-dash-days', '14')) || 14;
+    api('GET', '/api/staff/stats?days=' + days).then(function (s) {
+      clear(els.main);
+      var c = s.counts || {};
+      var w = s.window || {};
+      var t = s.today || {};
+      var range = h('select', null, [7, 14, 30, 90].map(function (d) { return h('option', { value: String(d), text: d + ' ngày' }); }));
+      range.value = String(days);
+      range.addEventListener('change', function () { writePref('umc2-dash-days', range.value); renderDashboard(); });
+      var head = h('div', { class: 'st-head' },
+        h('div', null, h('h1', { text: 'Thống kê hoạt động' }), h('div', { class: 'sub', text: 'Tổng cộng ' + s.total + ' tờ khai đang lưu · cập nhật ' + clock(s.generatedAt) })),
+        h('div', { class: 'row tight end' }, range,
+          h('button', { type: 'button', class: 'btn small', text: 'Xuất Excel ' + days + ' ngày', onclick: function () { exportExcel(days, ''); } }),
+          h('button', { type: 'button', class: 'btn ghost small', text: 'In / PDF', onclick: function () { window.print(); } })));
+      var tiles = h('div', { class: 'st-tiles' },
+        tile(t.submitted || 0, 'Tờ khai hôm nay'),
+        tile(c.pending || 0, 'Đang chờ duyệt', 'pending'),
+        tile((c.approved || 0) + (c.claimed || 0), 'Chờ bác sĩ / đang điền', 'approved'),
+        tile(w.completed || 0, 'Đã nhập HIS (' + days + ' ngày)', 'completed'),
+        tile(minutesText(w.medianApproveMinutes), 'Trung vị: gửi → duyệt'),
+        tile(minutesText(w.medianHisMinutes), 'Trung vị: duyệt → vào HIS'),
+        tile(w.fieldsFilled || 0, 'Trường đã điền tự động'),
+        tile(w.submitted ? Math.round((w.internet || 0) / w.submitted * 100) + '%' : '0%', 'Khai từ Internet'));
+      var statusRows = [
+        { key: 'pending', label: 'Chờ duyệt' }, { key: 'approved', label: 'Chờ bác sĩ' }, { key: 'claimed', label: 'Bác sĩ đang điền' },
+        { key: 'completed', label: 'Đã nhập HIS' }, { key: 'rejected', label: 'Từ chối / yêu cầu bổ sung' }];
+      var maxStatus = statusRows.reduce(function (m, r) { return Math.max(m, c[r.key] || 0); }, 0) || 1;
+      var statusList = h('div', { class: 'st-hbars' });
+      statusRows.forEach(function (r) {
+        var v = c[r.key] || 0;
+        var fill = h('div', { class: 'st-hbar-fill ' + r.key });
+        fill.style.width = Math.max(1, Math.round(v / maxStatus * 100)) + '%';
+        statusList.appendChild(h('div', { class: 'st-hbar' },
+          h('div', { class: 'st-hbar-label' }, statusBadge(r.key), h('span', { class: 'muted', text: ' ' + v })),
+          h('div', { class: 'st-hbar-track' }, fill)));
+      });
+      var complaints = h('ol', { class: 'st-toplist' });
+      (s.complaints || []).forEach(function (x) { complaints.appendChild(h('li', null, h('span', { text: x.text }), h('span', { class: 'muted', text: x.count + ' lượt' }))); });
+      if (!(s.complaints || []).length) complaints.appendChild(h('li', { class: 'muted', text: 'Chưa có dữ liệu.' }));
+      var devices = h('ul', { class: 'st-toplist' });
+      (s.devices || []).forEach(function (d) { devices.appendChild(h('li', null, h('span', { text: d.device }), h('span', { class: 'muted', text: d.completed + ' hồ sơ · ' + d.fields + ' trường' }))); });
+      if (!(s.devices || []).length) devices.appendChild(h('li', { class: 'muted', text: 'Chưa có máy bác sĩ hoàn tất hồ sơ.' }));
+      var wrap = h('div', { class: 'st-detail st-dash' }, head, tiles,
+        h('section', { class: 'card' }, h('div', { class: 'card-title' }, h('h3', { text: 'Tờ khai gửi theo ngày (' + days + ' ngày)' })), barChart(s.perDay || [], 'submitted', 'primary')),
+        h('div', { class: 'grid-2 st-dash-grid' },
+          h('section', { class: 'card' }, h('div', { class: 'card-title' }, h('h3', { text: 'Theo trạng thái (toàn bộ)' })), statusList),
+          h('section', { class: 'card' }, h('div', { class: 'card-title' }, h('h3', { text: 'Lý do khám thường gặp' })), complaints),
+          h('section', { class: 'card' }, h('div', { class: 'card-title' }, h('h3', { text: 'Máy bác sĩ đã nhập HIS' })), devices),
+          h('section', { class: 'card' }, h('div', { class: 'card-title' }, h('h3', { text: 'Hôm nay' })),
+            h('ul', { class: 'st-toplist' },
+              h('li', null, h('span', { text: 'Tờ khai mới' }), h('span', { class: 'muted', text: String(t.submitted || 0) })),
+              h('li', null, h('span', { text: 'Đã duyệt' }), h('span', { class: 'muted', text: String(t.approved || 0) })),
+              h('li', null, h('span', { text: 'Đã nhập HIS' }), h('span', { class: 'muted', text: String(t.completed || 0) })),
+              h('li', null, h('span', { text: 'Khai từ Internet' }), h('span', { class: 'muted', text: String(t.internet || 0) }))))),
+        h('p', { class: 'hint', text: 'Thời gian tính từ lúc người bệnh gửi tờ khai đến lúc điều dưỡng duyệt, và từ lúc duyệt đến lúc bác sĩ xác nhận đã lưu trên HIS. Xuất Excel được ghi vào nhật ký thao tác.' }));
+      els.main.appendChild(wrap);
+      els.main.scrollTop = 0;
+    }).catch(handleError);
+  }
+
   function openAdmin(initial) {
     var isAdmin = user.role === 'admin';
     var tabsDef = [['access', 'Mã QR & kết nối']];
@@ -805,6 +1023,12 @@
       } else {
         grid.appendChild(h('div', { class: 'st-access-card' }, h('h3', { text: 'Khai từ nhà qua Internet' }),
           h('p', { class: 'hint', text: 'Chưa bật. Người bệnh chỉ khai được trong mạng bệnh viện.' }), tunnelControls));
+      }
+      if (a.demoMode) {
+        grid.appendChild(a.demoStaffUrl
+          ? qrCard('Trang điều dưỡng qua Internet (CHẾ ĐỘ DEMO)', a.demoStaffUrl, 'Chỉ dùng với dữ liệu giả để trình diễn/chấm thi. Tắt ở Cài đặt khi dùng thật.')
+          : h('div', { class: 'st-access-card' }, h('h3', { text: 'Trang điều dưỡng qua Internet (CHẾ ĐỘ DEMO)' }),
+              h('p', { class: 'hint', text: 'Đang bật chế độ demo nhưng chưa có địa chỉ: ' + (a.demoStaffMessage || 'chờ đường hầm khởi động…') })));
       }
       content.appendChild(grid);
       var staffList = h('ul', null);
@@ -888,13 +1112,15 @@
     var pass = h('input', { id: 'uf-p', type: 'text', autocomplete: 'off', placeholder: existing ? 'Bỏ trống nếu không đặt lại' : 'Mật khẩu tạm' });
     var disabled = h('input', { id: 'uf-d', type: 'checkbox' });
     disabled.checked = existing ? !!existing.disabled : false;
+    var skipChange = h('input', { id: 'uf-s', type: 'checkbox' });
     modal(existing ? 'Sửa tài khoản' : 'Thêm tài khoản', h('div', { class: 'stack' },
       h('div', { class: 'grid-2' }, field('Tên đăng nhập', usern, existing ? null : 'Chữ thường không dấu, ví dụ: lan.nt', 'uf-u'), field('Tên hiển thị', name, null, 'uf-n')),
       h('div', { class: 'grid-2' }, field('Vai trò', role, null, 'uf-r'), field(existing ? 'Đặt lại mật khẩu tạm' : 'Mật khẩu tạm', pass, 'Tối thiểu 8 ký tự, có chữ và số.', 'uf-p')),
-      existing ? h('label', { class: 'check', for: 'uf-d' }, disabled, h('span', { text: 'Khóa tài khoản' })) : null), [
+      existing ? h('label', { class: 'check', for: 'uf-d' }, disabled, h('span', { text: 'Khóa tài khoản' })) : null,
+      existing ? null : h('label', { class: 'check', for: 'uf-s' }, skipChange, h('span', { text: 'Tài khoản demo: không bắt đổi mật khẩu ở lần đăng nhập đầu (ví dụ cấp cho Ban Giám khảo).' }))), [
       { label: 'Hủy' },
       { label: 'Lưu', kind: 'primary', onClick: function (close) {
-        api('POST', '/api/staff/users', { username: usern.value.trim(), displayName: name.value.trim(), role: role.value, password: pass.value, disabled: disabled.checked })
+        api('POST', '/api/staff/users', { username: usern.value.trim(), displayName: name.value.trim(), role: role.value, password: pass.value, disabled: disabled.checked, skipPasswordChange: skipChange.checked })
           .then(function () { close(); toast('Đã lưu tài khoản.', 'ok'); adminUsers(content); })
           .catch(handleError);
         return false;
@@ -916,13 +1142,36 @@
       };
       var requireId = h('input', { id: 'se-req', type: 'checkbox' });
       requireId.checked = !!s.requireHisPatientIdOnApprove;
+      var demoMode = h('input', { id: 'se-demo', type: 'checkbox' });
+      demoMode.checked = !!s.allowPublicStaffAccess;
+      var aiEnabled = h('input', { id: 'se-ai', type: 'checkbox' });
+      aiEnabled.checked = !!s.aiEnabled;
+      var aiModel = h('input', { id: 'se-aim', type: 'text', value: s.aiModel || '', placeholder: 'claude-sonnet-4-5' });
+      var aiEndpoint = h('input', { id: 'se-aie', type: 'url', value: s.aiEndpoint || '', placeholder: 'Mặc định: https://api.anthropic.com/v1/messages' });
+      var aiKey = h('input', { id: 'se-aik', type: 'password', autocomplete: 'off', placeholder: s.aiKeySet ? 'Đã lưu (mã hóa). Nhập để thay, gõ - để xóa' : 'sk-ant-…' });
+      var aiTest = h('button', { type: 'button', class: 'btn small', text: 'Kiểm tra kết nối AI' });
+      aiTest.addEventListener('click', function () {
+        aiTest.disabled = true;
+        api('POST', '/api/staff/ai/test', {}).then(function (r) { aiTest.disabled = false; toast('AI trả lời: "' + r.reply + '" (' + r.model + ')', 'ok'); })
+          .catch(function (err) { aiTest.disabled = false; handleError(err); });
+      });
+      var seedBtn = h('button', { type: 'button', class: 'btn small', text: 'Tạo 14 tờ khai mẫu (dữ liệu giả)' });
+      seedBtn.addEventListener('click', function () {
+        confirmDialog('Tạo dữ liệu mẫu?', 'Thêm 14 tờ khai giả (tên "Mẫu/Thử/Demo", số điện thoại 0900000xxx) ở đủ các trạng thái để trình diễn. Không dùng trên máy chủ thật.', 'Tạo', function () {
+          api('POST', '/api/staff/demo-data', {}).then(function (r) { toast('Đã tạo ' + r.created + ' tờ khai mẫu.', 'ok'); refreshList(true); }).catch(handleError);
+        });
+      });
       var saveBtn = h('button', { type: 'button', class: 'btn primary', text: 'Lưu cài đặt' });
       saveBtn.addEventListener('click', function () {
-        var body = { requireHisPatientIdOnApprove: requireId.checked };
+        var body = { requireHisPatientIdOnApprove: requireId.checked, allowPublicStaffAccess: demoMode.checked,
+          aiEnabled: aiEnabled.checked, aiModel: aiModel.value.trim(), aiEndpoint: aiEndpoint.value.trim(), aiApiKey: aiKey.value.trim() };
         Object.keys(inputs).forEach(function (k) { body[k] = inputs[k].type === 'number' ? Number(inputs[k].value) : inputs[k].value.trim(); });
         api('POST', '/api/staff/settings', body).then(function (r) {
           boot.hospitalName = r.hospitalName;
           boot.departmentName = r.departmentName;
+          boot.aiEnabled = !!(r.aiEnabled && r.aiKeySet);
+          aiKey.value = '';
+          aiKey.placeholder = r.aiKeySet ? 'Đã lưu (mã hóa). Nhập để thay, gõ - để xóa' : 'sk-ant-…';
           toast('Đã lưu cài đặt.', 'ok');
         }).catch(handleError);
       });
@@ -937,6 +1186,15 @@
           field('Tối đa tờ khai chờ duyệt', inputs.maxPending, null, 'se-mp'),
           field('Giới hạn gửi / IP / 10 phút', inputs.publicSubmitLimitPerIp, null, 'se-li')),
         h('label', { class: 'check', for: 'se-req' }, requireId, h('span', { text: 'Bắt buộc nhập mã BN trên HIS trước khi duyệt (khuyên dùng khi quầy tiếp nhận luôn tạo hồ sơ trước).' })),
+        h('label', { class: 'check', for: 'se-demo' }, demoMode, h('span', { text: 'CHẾ ĐỘ DEMO: cho phép mở trang điều dưỡng qua Internet (đường hầm Cloudflare thứ hai). Chỉ dùng với dữ liệu giả; tắt khi vận hành thật.' })),
+        h('div', { class: 'row tight' }, seedBtn, h('span', { class: 'hint', text: 'Dữ liệu mẫu phục vụ trình diễn và huấn luyện điều dưỡng.' })),
+        h('div', { class: 'card flat' },
+          h('h3', { text: 'Trợ lý AI có kiểm soát' }),
+          h('p', { class: 'hint', text: 'Dùng Anthropic Claude API. Khóa API được lưu mã hóa (DPAPI) trên máy chủ và không bao giờ hiển thị lại. AI chỉ nhận dữ liệu lâm sàng đã bỏ định danh của từng tờ khai; kết quả phải được điều dưỡng duyệt từng mục. Lưu cài đặt rồi bấm Kiểm tra kết nối.' }),
+          h('label', { class: 'check', for: 'se-ai' }, aiEnabled, h('span', { text: 'Bật trợ lý AI trên trang điều dưỡng' })),
+          h('div', { class: 'grid-2' }, field('Khóa API (Anthropic)', aiKey, null, 'se-aik'), field('Mô hình', aiModel, 'Ví dụ claude-sonnet-4-5 hoặc claude-haiku-4-5 (rẻ, nhanh).', 'se-aim')),
+          field('Địa chỉ dịch vụ (nâng cao)', aiEndpoint, 'Bỏ trống để dùng API Anthropic chính thức; điền khi dùng máy chủ trung gian của bệnh viện.', 'se-aie'),
+          h('div', { class: 'row tight' }, aiTest)),
         h('div', { class: 'alert info' }, h('div', null, h('strong', { text: 'Thông tin kỹ thuật' }),
           'Cổng nhân viên: ' + s.staffPort + ' · Cổng người bệnh: ' + s.publicPort + ' · Dữ liệu (mã hóa DPAPI): ' + s.dataDirectory)),
         h('div', { class: 'row end' }, saveBtn)));
