@@ -489,12 +489,15 @@ namespace HisAdmissionAssistant
             return string.Equals(field.Operation, "Read", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>WinForms multi-line TextBoxes need CRLF; single-line boxes get the text flattened.</summary>
+        /// <summary>
+        /// WinForms multi-line TextBoxes need CRLF; single-line boxes get the text flattened ("a\nb" → "a; b").
+        /// Leading/trailing blank lines are dropped first so a trailing newline cannot leave a stray "; ".
+        /// </summary>
         public static string PrepareText(FieldMapping field)
         {
-            var value = (field.Value ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            var value = (field.Value ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Trim();
             if (field.Multiline) return value.Replace("\n", "\r\n");
-            return Regex.Replace(value, @"\s*\n+\s*", "; ").Trim();
+            return Regex.Replace(value, @"\s*\n+\s*", "; ");
         }
 
         private static IList<FieldResult> OrderResults(IList<FieldMapping> selected, IList<FieldResult> results)
