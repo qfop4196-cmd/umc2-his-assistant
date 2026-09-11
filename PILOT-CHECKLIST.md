@@ -12,7 +12,8 @@
 
 1. Bấm đúp `tools\Pilot\KIEM-THU-TU-DONG.cmd` (tương đương `.\build.ps1 -Test -Smoke`): phải báo **KẾT QUẢ: PASS**; nhật ký ở `dist\pilot\kiem-thu.log`.
 2. Bấm đúp `tools\Pilot\CHAY-THU-MOCK-HIS.cmd`: mở máy chủ tờ khai **tạm** (chỉ localhost, cổng 18080/18081, dữ liệu thử), Mock HIS và trợ lý. Trên Mock HIS chọn **BN-TEST-001**.
-   Trợ lý: tab **Tờ khai BN → Ghép nối máy chủ…** → `http://localhost:18080` + mã 6 số tạo ở **Quản trị → Máy bác sĩ** (lần đầu mở `http://localhost:18080/` để tạo tài khoản quản trị).
+   Trợ lý: tab **Tờ khai BN → Ghép nối máy chủ…** → `http://localhost:18080` + mã 6 số tạo ở **Quản trị → Máy bác sĩ** (lần đầu mở `http://localhost:18080/` để tạo tài khoản quản trị: tên đăng nhập chữ thường không dấu, mật khẩu ≥ 8 ký tự có cả chữ và số).
+   Dữ liệu thử nằm ở `%LOCALAPPDATA%\UMC2\PilotIntakeData` và được giữ giữa các lần chạy (tài khoản, ghép nối vẫn còn); muốn làm lại từ đầu bấm `LAM-LAI-TU-DAU.cmd`.
 3. Mở `http://localhost:18081/` (hoặc điện thoại cùng mạng khi dùng máy chủ thật): khai một tờ khai thử, ghi lại mã tờ khai.
 4. Trang điều dưỡng: tìm mã tờ khai → nhập mã BN `BN-TEST-001` → nhập sinh hiệu → **Duyệt & chuyển bác sĩ**.
 5. Đưa cửa sổ Mock HIS lên trước → trợ lý tự nhận profile **Kiểm thử — Mock HIS**, bảng gọn phải hiện **✔ Có tờ khai**.
