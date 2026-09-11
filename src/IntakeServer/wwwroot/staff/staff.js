@@ -994,7 +994,7 @@
     api('GET', '/api/staff/access').then(function (a) {
       clear(content);
       var lan = (a.lanPatientUrls || []).filter(function (u) { return u.indexOf('localhost') < 0; })[0] || (a.lanPatientUrls || [])[0] || '';
-      if if (a.localOnly && !a.demoMode) content.appendChild(h('div', { class: 'alert warn' }, h('div', null, h('strong', { text: 'Máy chủ đang chỉ phục vụ trên chính máy này (localhost).' }),
+      if (a.localOnly && !a.demoMode && !(a.tunnel && a.tunnel.running)) content.appendChild(h('div', { class: 'alert warn' }, h('div', null, h('strong', { text: 'Máy chủ đang chỉ phục vụ trên chính máy này (localhost).' }),
         'Chạy install-server.ps1 bằng quyền Administrator để mở cổng cho mạng LAN và Internet.')));
       var grid = h('div', { class: 'st-access-grid' });
       if (lan) {
