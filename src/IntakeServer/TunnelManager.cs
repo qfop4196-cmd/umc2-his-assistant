@@ -64,6 +64,9 @@ namespace Umc2.IntakeServer
         {
             lock (sync)
             {
+                // Idempotent: a tunnel that is already up for this port keeps its (random) address — restarting it
+                // would hand out a new URL every time an administrator saves settings.
+                if (mode == "quick" && publicPort == port && process != null && !HasExited(process)) return;
                 publicPort = port;
                 configuredPath = cloudflaredPath;
                 mode = "quick";
