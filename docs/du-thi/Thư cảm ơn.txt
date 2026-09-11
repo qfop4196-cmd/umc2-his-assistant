@@ -1,0 +1,6 @@
+Kính gửi hai Thầy,
+    Dạ, em đã cấu hình .gitignore để loại toàn bộ dữ liệu nhạy cảm khỏi Git: khoá API được mã hoá, mật khẩu tài khoản chỉ lưu dạng hash, dữ liệu tờ khai được mã hoá khi lưu — tất cả nằm trong thư mục dữ liệu cục bộ trên         máy chủ, không đưa lên GitHub.
+    Hai đường dẫn em gửi trong phiếu đăng ký là đường dẫn cố định, nhưng ứng dụng chạy trên máy chủ của em qua Cloudflare Tunnel nên chỉ truy cập được khi máy chủ đang bật. Nếu hai Thầy mở không được, rất mong Thầy liên hệ     em qua số 0398 034 129 để em bật máy chủ và hỗ trợ truy cập ngay ạ.
+    Em rất cảm ơn hai Thầy đã tạo điều kiện và hỗ trợ để em có cơ hội xây dựng và hoàn thiện những ứng dụng hữu ích trong thực tế ạ.
+Trân trọng,
+BS. Hoàng Quang Huy
